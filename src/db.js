@@ -16,12 +16,16 @@ export const json = (v) => (typeof v === 'string' ? JSON.parse(v) : v)
 
 export async function connect() {
   await sql`SELECT 1`.execute(db)
-  const ddl = await Bun.file(new URL('./schema.sql', import.meta.url)).text()
-  await client.unsafe(ddl)
   logger.info(` - database '${parseDatabaseUrl(connString).database}' connected`)
 }
 
 export async function destroy() {
   await db.destroy()
   logger.info('Database disconnected')
+}
+
+export async function migrate() {
+  const ddl = await Bun.file(new URL('./schema.sql', import.meta.url)).text()
+  await client.unsafe(ddl)
+  logger.info(` - database '${parseDatabaseUrl(connString).database}' migrated`)
 }

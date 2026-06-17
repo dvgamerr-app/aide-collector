@@ -6,7 +6,10 @@
     "prepare": "husky",
     "proxy": "cloudflared tunnel run dev",
     "dev": "bun run --watch ./src/index.js | bun x pino-pretty",
-    "start": "bun run ./src/index.js"
+    "start": "bun run ./src/index.js",
+    "migrate": "bun run ./src/migrate.js",
+    "lint:fix": "eslint . --fix",
+    "format:fix": "prettier --check . --write"
   },
   "lint-staged": {
     "*": "prettier --check . --write",
