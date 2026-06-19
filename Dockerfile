@@ -1,5 +1,7 @@
 FROM oven/bun:alpine
 
+LABEL org.opencontainers.image.source="https://github.com/dvgamerr-app/aide-collector"
+
 WORKDIR /app
 
 COPY package.json bun.lockb ./
