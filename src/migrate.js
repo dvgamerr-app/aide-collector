@@ -1,4 +1,5 @@
-import { destroy, migrate } from './db'
+import { destroy, migrate, migrateDown } from './db'
 
-await migrate()
+const isDown = process.argv.includes('--down')
+await (isDown ? migrateDown() : migrate())
 await destroy()

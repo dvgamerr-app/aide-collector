@@ -7,7 +7,8 @@
     "proxy": "cloudflared tunnel run dev",
     "dev": "bun run --watch ./src/index.js | bun x pino-pretty",
     "start": "bun run ./src/index.js",
-    "migrate": "bun run ./src/migrate.js",
+    "migration:run": "bun ./src/migrate.js",
+    "migration:down": "bun ./src/migrate.js --down",
     "lint:fix": "eslint . --fix",
     "format:fix": "prettier --check . --write"
   },

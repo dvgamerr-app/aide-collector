@@ -1,5 +1,8 @@
 import { Kysely, sql } from 'kysely'
 import { PostgresJSDialect } from 'kysely-postgres-js'
+import { FileMigrationProvider, Migrator } from 'kysely/migration'
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
 import postgres from 'postgres'
 
 import { logger, parseDatabaseUrl } from './config'
@@ -25,7 +28,33 @@ export async function destroy() {
 }
 
 export async function migrate() {
-  const ddl = await Bun.file(new URL('./schema.sql', import.meta.url)).text()
-  await client.unsafe(ddl)
+  const { error, results } = await getMigrator().migrateToLatest()
+  logResults(results)
+  if (error) throw error
   logger.info(` - database '${parseDatabaseUrl(connString).database}' migrated`)
+}
+
+export async function migrateDown() {
+  const { error, results } = await getMigrator().migrateDown()
+  logResults(results)
+  if (error) throw error
+  logger.info(` - database '${parseDatabaseUrl(connString).database}' rolled back`)
+}
+
+function getMigrator() {
+  return new Migrator({
+    db,
+    provider: new FileMigrationProvider({
+      fs,
+      migrationFolder: path.join(import.meta.dirname, 'migrations'),
+      path,
+    }),
+  })
+}
+
+function logResults(results) {
+  for (const r of results ?? []) {
+    if (r.status === 'Success') logger.info(` - migration '${r.migrationName}' applied`)
+    if (r.status === 'Error') logger.error(` - migration '${r.migrationName}' failed`)
+  }
 }

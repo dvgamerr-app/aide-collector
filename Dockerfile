@@ -8,4 +8,4 @@ COPY ./src/ ./src/
 RUN bun i --ignore-scripts --production
 
 EXPOSE 3000
-CMD ["bun", "run", "/app/src/index.js"]
+CMD ["bun", "/app/src/index.js"]
