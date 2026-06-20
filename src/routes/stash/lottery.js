@@ -68,16 +68,16 @@ const runBulk = async (db, logger, targetDate) => {
       }
 
       const oldest = draws[draws.length - 1].str
-      logger.info({ oldest, targetDate, total }, 'bulk lottery progress')
+      logger.info(`bulk lottery ${oldest}: ${total} draws (until ${targetDate})`)
 
       if (oldest <= targetDate) break
 
       cursorDate = dayjs(oldest).subtract(1, 'day').format('YYYY-MM-DD')
       await new Promise((r) => setTimeout(r, 1000))
     }
-    logger.info({ targetDate, total }, 'bulk lottery done')
+    logger.info(`bulk lottery done: ${total} draws until ${targetDate}`)
   } catch (error) {
-    logger.error({ error: error.message, targetDate, total }, 'bulk lottery failed')
+    logger.error(`bulk lottery failed: ${error.message} (total ${total}, until ${targetDate})`)
   }
 }
 

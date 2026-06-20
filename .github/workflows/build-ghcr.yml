@@ -101,6 +101,10 @@ jobs:
             --name ${{ env.CONTAINER_NAME }} \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
             -e MEA_PAYLOAD=${{ secrets.MEA_PAYLOAD }} \
+            -e SOLAR_DEVICE_ID=${{ vars.SOLAR_DEVICE_ID }} \
+            -e SOLAR_OPEN_APP_ID=${{ vars.SOLAR_OPEN_APP_ID }} \
+            -e SOLAR_OPEN_APP_SECRET=${{ secrets.SOLAR_OPEN_APP_SECRET }} \
+            -e SOLAR_PAYLOAD=${{ secrets.SOLAR_PAYLOAD }} \
             -p 3001:3000 \
             ${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}
 
