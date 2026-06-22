@@ -145,15 +145,23 @@ const collect = async (db, token, fromTime, toTime) => {
   return { points, rows: await upsertRecords(db, rows) }
 }
 
+// "1h" -> 1, "30m" -> 0.5, invalid -> null
+const parseInterval = (s) => {
+  const m = /^(\d+)(h|m)$/.exec(s || '')
+  if (!m) return null
+  return m[2] === 'h' ? Number(m[1]) : Number(m[1]) / 60
+}
+
 // incremental: pull the last LOOKBACK_HOURS only — sized to the hourly job, not a full day
-export const solar = async ({ db, logger }) => {
+export const solar = async ({ db, logger, query }) => {
   const miss = missingEnv()
   if (miss) return Response.json({ error: miss, success: false }, { status: 500 })
+  const hours = parseInterval(query?.interval) ?? LOOKBACK_HOURS
   try {
     const token = await getToken(db)
-    const [from, to] = trailing(LOOKBACK_HOURS)
+    const [from, to] = trailing(hours)
     const { points, rows } = await collect(db, token.accessToken, from, to)
-    logger.info(`solar: ${rows} rows from ${points} points (last ${LOOKBACK_HOURS}h)`)
+    logger.info(`solar: ${rows} rows from ${points} points (last ${hours}h)`)
     return Response.json({ points, rows, success: true })
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting solar')
