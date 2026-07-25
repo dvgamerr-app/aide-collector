@@ -1,21 +1,22 @@
 import { randomUUID } from 'crypto'
 import { Elysia, t } from 'elysia'
 
-const MASTER_KEY = process.env.MASTER_KEY
+const getMasterKey = () => Bun.env.MASTER_KEY || process.env.MASTER_KEY
+const unauthorizedResponse = () => new Response(null, { status: 401 })
 
 export async function validateApiKey({ db, headers }) {
   const key = headers['x-api-key']?.trim()
-  if (!key) return new Response(null, { status: 401 })
+  if (!key) return unauthorizedResponse()
+
+  const masterKey = getMasterKey()
+  if (masterKey && key === masterKey) return
 
   const record = await db.selectFrom('api_keys').selectAll().where('api_key', '=', key).limit(1).executeTakeFirst()
-  if (!record) return new Response(null, { status: 401 })
-
-  if (MASTER_KEY && key === MASTER_KEY) return
-
+  if (!record) return unauthorizedResponse()
   if (!record.is_active) return new Response(null, { status: 401 })
   if (record.expires_at && Date.now() > +new Date(record.expires_at)) {
     await db.updateTable('api_keys').set({ is_active: false }).where('api_key', '=', key).execute()
-    return new Response(null, { status: 401 })
+    return unauthorizedResponse()
   }
 }
 
