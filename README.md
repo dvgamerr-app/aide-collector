@@ -19,6 +19,8 @@ bun dev
 ## ตัวแปรสภาพแวดล้อม
 
 - `DATABASE_URL`: connection string ของ PostgreSQL (จำเป็น)
+- `DISCORD_WEBHOOK`: Discord webhook สำหรับแจ้งเตือนเมื่ออุปกรณ์ Solar Offline เกิน 15 นาที และกลับมา Online
+- `MASTER_KEY`: API key พิเศษสำหรับ bootstrap/จัดการ token โดยไม่ต้องมี record ในตาราง `api_keys` มาก่อน (ไม่บังคับ)
 - `PORT`: พอร์ตที่เซิร์ฟเวอร์จะทำงาน (ค่าเริ่มต้น: 3000)
 - `LOG_LEVEL`: ระดับ log ของ pino (ค่าเริ่มต้น: info)
 
@@ -32,5 +34,6 @@ bun dev
 - `POST /reminder/gold` — อัปเดตข้อมูลการลงทุนทอง
 - `GET /lottery` — ประวัติผลรางวัล (latest first)
 - `GET|POST /v1/token`, `DELETE /v1/revoke` — จัดการ API token (header `X-API-Key`)
+  - ถ้าตั้ง `MASTER_KEY` ไว้ สามารถใช้ key นี้เรียก endpoint กลุ่ม token ได้ทันทีโดยไม่ต้อง seed `api_keys`
 
 API docs (Swagger): `GET /docs`
