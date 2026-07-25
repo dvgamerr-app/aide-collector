@@ -16,6 +16,8 @@ const DEVICE_ID = Bun.env.SOLAR_DEVICE_ID
 const PAGE = 300 // records/page. 5-min cadence -> 288/day, so a full day fits in one page
 // trailing window for the hourly job. 5-min cadence + overlap tolerates ~2 missed runs; upsert dedups overlap
 const LOOKBACK_HOURS = 3
+const OFFLINE_AFTER_MS = 15 * 60 * 1000
+const STATUS_REMINDER = 'solar_device_status'
 
 const COMMON = {
   Accept: 'application/json',
@@ -145,6 +147,78 @@ const collect = async (db, token, fromTime, toTime) => {
   return { points, rows: await upsertRecords(db, rows) }
 }
 
+const sendDiscordStatus = async (webhookUrl, status, deviceId, lastRecordAt) => {
+  if (!webhookUrl) throw new Error('missing env: DISCORD_WEBHOOK')
+  const detail = lastRecordAt ? ` (ข้อมูลล่าสุด: ${lastRecordAt.toISOString()})` : ' (ยังไม่พบข้อมูล)'
+  const content = status === 'offline' ? `🔴 อุปกรณ์ ${deviceId} ออฟไลน์${detail}` : `🟢 อุปกรณ์ ${deviceId} กลับมาออนไลน์แล้ว`
+  const response = await fetch(webhookUrl, {
+    body: JSON.stringify({ content }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  })
+  if (!response.ok) throw new Error(`Discord webhook failed: HTTP ${response.status}`)
+}
+
+const latestRecordAt = async (db, deviceId) => {
+  const row = await db
+    .selectFrom('stash.solar_record')
+    .select((eb) => eb.fn.max('recorded_at').as('recorded_at'))
+    .where('device_id', '=', deviceId)
+    .executeTakeFirst()
+  return row?.recorded_at ? new Date(row.recorded_at) : null
+}
+
+const storedDeviceStatus = async (db) => {
+  const row = await db.selectFrom('reminder').select('note').where('name', '=', STATUS_REMINDER).executeTakeFirst()
+  return row ? json(row.note) : null
+}
+
+const storeDeviceStatus = async (db, deviceId, status, recordAt, now) => {
+  const note = sql`${JSON.stringify({
+    changedAt: new Date(now).toISOString(),
+    deviceId,
+    lastRecordAt: recordAt?.toISOString() || null,
+    status,
+  })}::jsonb`
+  await db
+    .insertInto('reminder')
+    .values({ name: STATUS_REMINDER, note })
+    .onConflict((oc) => oc.column('name').doUpdateSet({ note }))
+    .execute()
+}
+
+export const getSolarStatusTransition = (recordAt, previousStatus, now = Date.now()) => {
+  const status = recordAt && now - recordAt.getTime() < OFFLINE_AFTER_MS ? 'online' : 'offline'
+  const shouldNotify = previousStatus !== status && !(status === 'online' && previousStatus !== 'offline')
+  return { shouldNotify, status }
+}
+
+export const checkSolarDeviceStatus = async ({
+  db,
+  deviceId = DEVICE_ID,
+  logger,
+  notify = sendDiscordStatus,
+  now = Date.now(),
+  webhookUrl = Bun.env.DISCORD_WEBHOOK,
+}) => {
+  const recordAt = await latestRecordAt(db, deviceId)
+  const previous = await storedDeviceStatus(db)
+  const previousStatus = previous?.deviceId === deviceId ? previous.status : undefined
+  const { shouldNotify, status } = getSolarStatusTransition(recordAt, previousStatus, now)
+
+  if (previousStatus === status) return status
+
+  if (!shouldNotify) {
+    await storeDeviceStatus(db, deviceId, status, recordAt, now)
+    return status
+  }
+
+  await notify(webhookUrl, status, deviceId, recordAt)
+  await storeDeviceStatus(db, deviceId, status, recordAt, now)
+  logger.info(`solar device ${deviceId}: ${status}`)
+  return status
+}
+
 // "1h" -> 1, "30m" -> 0.5, invalid -> null
 const parseInterval = (s) => {
   const m = /^(\d+)(h|m)$/.exec(s || '')
@@ -157,16 +231,26 @@ export const solar = async ({ db, logger, query }) => {
   const miss = missingEnv()
   if (miss) return Response.json({ error: miss, success: false }, { status: 500 })
   const hours = parseInterval(query?.interval) ?? LOOKBACK_HOURS
+  let result
   try {
     const token = await getToken(db)
     const [from, to] = trailing(hours)
     const { points, rows } = await collect(db, token.accessToken, from, to)
     logger.info(`solar: ${rows} rows from ${points} points (last ${hours}h)`)
-    return Response.json({ points, rows, success: true })
+    result = { body: { points, rows, success: true }, status: 200 }
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting solar')
-    return Response.json({ error: error.message, success: false }, { status: 500 })
+    result = { body: { error: error.message, success: false }, status: 500 }
   }
+
+  // Run after every collection attempt, including a failed API request, so stale records can trigger Offline.
+  try {
+    await checkSolarDeviceStatus({ db, logger })
+  } catch (error) {
+    logger.error({ error: error.message }, 'Error checking solar device status')
+  }
+
+  return Response.json(result.body, { status: result.status })
 }
 
 const runBulk = async (db, logger, targetDate) => {

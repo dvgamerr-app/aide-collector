@@ -100,6 +100,7 @@ jobs:
           container run -d \
             --name ${{ env.CONTAINER_NAME }} \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+            -e DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }} \
             -e MEA_PAYLOAD=${{ secrets.MEA_PAYLOAD }} \
             -e SOLAR_DEVICE_ID=${{ vars.SOLAR_DEVICE_ID }} \
             -e SOLAR_OPEN_APP_ID=${{ vars.SOLAR_OPEN_APP_ID }} \
