@@ -4,6 +4,7 @@ import { cinema } from './cinema'
 import { gold } from './gold'
 import { lottery, lotteryBulk } from './lottery'
 import { mea } from './mea'
+import { mwa } from './mwa'
 import { solar, solarBulk } from './solar'
 
 const route = new Elysia({ prefix: '/stash' })
@@ -21,6 +22,13 @@ route.patch('/mea', mea, {
   detail: {
     description: 'fetch member meters and electric bill history, and store them.',
     summary: 'Stash MEA electric',
+    tags: ['Stash'],
+  },
+})
+route.patch('/mwa', mwa, {
+  detail: {
+    description: 'Fetch MWA account receipt history and upsert water bills.',
+    summary: 'Stash MWA water bills',
     tags: ['Stash'],
   },
 })
