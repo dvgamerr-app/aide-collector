@@ -34,10 +34,11 @@ route.patch('/lottery/bulk', lotteryBulk, {
 })
 route.patch('/solar', solar, {
   detail: {
-    description: 'Fetch solar device attribute timeseries (yesterday + today) and upsert.',
+    description: 'Fetch a trailing solar device attribute timeseries window (3 hours by default) and upsert.',
     summary: 'Stash solar production',
     tags: ['Stash'],
   },
+  query: t.Object({ interval: t.Optional(t.String({ description: 'Trailing window such as 30m or 1h', examples: ['1h'] })) }),
 })
 route.patch('/solar/bulk', solarBulk, {
   detail: {
