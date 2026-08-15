@@ -16,28 +16,41 @@ const fetchDraws = async (date) => {
   return data || []
 }
 
+export const mapDrawValues = (draws) => [
+  ...new Map(
+    draws.map((draw) => {
+      const p = draw.prizes
+      return [
+        draw.str,
+        {
+          back_three: p['10'],
+          back_two: p['7'],
+          draw: draw.str,
+          first_prize: p['1'][0],
+          front_three: p['6'],
+        },
+      ]
+    }),
+  ).values(),
+]
+
 const upsertDraws = async (db, draws) => {
-  for (const draw of draws) {
-    const p = draw.prizes
-    await db
-      .insertInto('stash.lottery')
-      .values({
-        back_three: p['10'],
-        back_two: p['7'],
-        draw: draw.str,
-        first_prize: p['1'][0],
-        front_three: p['6'],
-      })
-      .onConflict((oc) =>
-        oc.column('draw').doUpdateSet((eb) => ({
-          back_three: eb.ref('excluded.back_three'),
-          back_two: eb.ref('excluded.back_two'),
-          first_prize: eb.ref('excluded.first_prize'),
-          front_three: eb.ref('excluded.front_three'),
-        })),
-      )
-      .execute()
-  }
+  if (!draws.length) return
+
+  const values = mapDrawValues(draws)
+
+  await db
+    .insertInto('stash.lottery')
+    .values(values)
+    .onConflict((oc) =>
+      oc.column('draw').doUpdateSet((eb) => ({
+        back_three: eb.ref('excluded.back_three'),
+        back_two: eb.ref('excluded.back_two'),
+        first_prize: eb.ref('excluded.first_prize'),
+        front_three: eb.ref('excluded.front_three'),
+      })),
+    )
+    .execute()
 }
 
 export const lottery = async ({ db, logger }) => {
