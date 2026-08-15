@@ -1,6 +1,6 @@
 # Aide Collector
 
-REST API สำหรับรวบรวมและอ่านข้อมูล cinema, gold, lottery, MEA, solar และ reminder พร้อม endpoint สำหรับจัดการ API token สร้างด้วย Bun, Elysia, Kysely และ PostgreSQL
+REST API สำหรับรวบรวมและอ่านข้อมูล cinema, gold, lottery, MEA, MWA, solar และ reminder พร้อม endpoint สำหรับจัดการ API token สร้างด้วย Bun, Elysia, Kysely และ PostgreSQL
 
 ## เริ่มต้นใช้งาน
 
@@ -27,6 +27,8 @@ bun run dev
 | `LOG_LEVEL`             | ไม่                  | ระดับ log ของ Pino ค่าเริ่มต้น `info`                                 |
 | `MASTER_KEY`            | ไม่                  | key สำหรับ bootstrap/จัดการ token โดยไม่ต้องมี record ใน `api_keys`   |
 | `MEA_PAYLOAD`           | เฉพาะ MEA            | Base64 ของ JSON `{ "username", "password" }`                          |
+| `MWA_ACCOUNT_CODE`      | เฉพาะ MWA            | เลขบัญชีผู้ใช้น้ำ; รองรับหลายบัญชีโดยคั่นด้วย comma                   |
+| `MWA_PAYLOAD`           | เฉพาะ MWA            | Base64 ของ JSON `{ "userId", "password" }`                            |
 | `SOLAR_DEVICE_ID`       | เฉพาะ Solar          | device ID ที่จะรวบรวมข้อมูล                                           |
 | `SOLAR_OPEN_APP_ID`     | เฉพาะ Solar          | App ID ของ Solar Open API                                             |
 | `SOLAR_OPEN_APP_SECRET` | เฉพาะ Solar          | encrypted App Secret สำหรับลงลายเซ็น request                          |
@@ -64,6 +66,7 @@ bun run build           # bundle สำหรับ Bun ไปที่ build/in
 - `PATCH /stash/lottery` — ดึงผลรางวัลล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
 - `PATCH /stash/mea` — ดึงมิเตอร์และประวัติค่าไฟ MEA
+- `PATCH /stash/mwa` — login, ดึงประวัติใบเสร็จ/ค่าน้ำ MWA และบันทึกแบบ upsert
 - `PATCH /stash/solar?interval=1h` — ดึง timeseries ย้อนหลัง; รองรับหน่วย `m`/`h` และค่าเริ่มต้น 3 ชั่วโมง
 - `PATCH /stash/solar/bulk?date=YYYY-MM-DD` — เริ่ม backfill Solar รายวันและตอบ `202` ทันที
 - `POST /reminder/gold` — บันทึกข้อมูลการลงทุนทองสำหรับการคำนวณ collector

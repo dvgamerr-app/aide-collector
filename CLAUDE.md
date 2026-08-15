@@ -6,7 +6,7 @@
 - Database: PostgreSQL through Kysely/Postgres.js.
 - Entry point: `src/index.js`.
 - Schema changes: Kysely migration modules in `src/migrations`; startup does not run them automatically.
-- External collectors: `src/routes/stash` (gold, lottery, MEA, solar and cinema ingestion).
+- External collectors: `src/routes/stash` (gold, lottery, MEA, MWA, solar and cinema ingestion).
 - JSON/JSONB normalization: `parseJson` in `src/json.js` (Postgres.js may return JSONB strings).
 - Shared JSON reminder persistence: `src/reminders.js`; use `getReminder`/`setReminder` instead of repeating JSONB upsert queries.
 - Request metadata is request-local and comes from `requestContext` in `src/middleware.js`; do not store trace IDs or start times in Elysia's shared application `store`.
@@ -50,4 +50,4 @@ bun run build
 git diff --check
 ```
 
-Current expected test inventory after this update: 11 tests across middleware, lottery batch mapping, token authorization and Solar device-status transitions.
+Current expected test inventory after this update: 15 tests across middleware, lottery/MWA mapping, token authorization and Solar device-status transitions.
