@@ -4,14 +4,18 @@
   "packageManager": "bun@1.3.14",
   "module": "src/index.js",
   "scripts": {
-    "prepare": "husky",
-    "proxy": "cloudflared tunnel run dev",
+    "build": "bun build ./src/index.js --target bun --outdir ./build",
     "dev": "bun run --watch ./src/index.js | bun x pino-pretty",
-    "start": "bun run ./src/index.js",
+    "format": "prettier --check .",
+    "format:fix": "prettier --check . --write",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "migration:run": "bun ./src/migrate.js",
     "migration:down": "bun ./src/migrate.js --down",
-    "lint:fix": "eslint . --fix",
-    "format:fix": "prettier --check . --write"
+    "prepare": "husky",
+    "proxy": "cloudflared tunnel run dev",
+    "start": "bun run ./src/index.js",
+    "test": "bun test"
   },
   "lint-staged": {
     "*": "prettier --check . --write",
