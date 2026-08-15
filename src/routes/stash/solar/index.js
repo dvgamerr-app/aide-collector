@@ -1,7 +1,6 @@
 import dayjs from 'dayjs'
-import { sql } from 'kysely'
 
-import { json } from '../../../db'
+import { getReminder, setReminder } from '../../../reminders'
 import { openSign } from './sign'
 
 const ORIGIN = 'https://solar.siseli.com'
@@ -64,12 +63,7 @@ const storeToken = async (db, d) => {
     refreshExpire: d.refreshTokenWillExpiredAt,
     refreshToken: d.refreshToken,
   }
-  const note = sql`${JSON.stringify(tk)}::jsonb`
-  await db
-    .insertInto('reminder')
-    .values({ name: 'solar_token', note })
-    .onConflict((oc) => oc.column('name').doUpdateSet({ note }))
-    .execute()
+  await setReminder(db, 'solar_token', tk)
   return tk
 }
 
@@ -84,8 +78,7 @@ const refresh = async (db, tk) =>
 // reuse cached token (60s margin); refresh when access expired, full login when refresh also expired.
 // ponytail: assumes *WillExpiredAt are epoch-ms (matches the MEA token cache convention)
 const getToken = async (db) => {
-  const row = await db.selectFrom('reminder').select('note').where('name', '=', 'solar_token').executeTakeFirst()
-  const tk = row && json(row.note)
+  const tk = await getReminder(db, 'solar_token')
   const now = Date.now() + 60_000
   if (!tk) return login(db)
   if (tk.accessExpire > now) return tk
@@ -168,23 +161,15 @@ const latestRecordAt = async (db, deviceId) => {
   return row?.recorded_at ? new Date(row.recorded_at) : null
 }
 
-const storedDeviceStatus = async (db) => {
-  const row = await db.selectFrom('reminder').select('note').where('name', '=', STATUS_REMINDER).executeTakeFirst()
-  return row ? json(row.note) : null
-}
+const storedDeviceStatus = (db) => getReminder(db, STATUS_REMINDER)
 
 const storeDeviceStatus = async (db, deviceId, status, recordAt, now) => {
-  const note = sql`${JSON.stringify({
+  await setReminder(db, STATUS_REMINDER, {
     changedAt: new Date(now).toISOString(),
     deviceId,
     lastRecordAt: recordAt?.toISOString() || null,
     status,
-  })}::jsonb`
-  await db
-    .insertInto('reminder')
-    .values({ name: STATUS_REMINDER, note })
-    .onConflict((oc) => oc.column('name').doUpdateSet({ note }))
-    .execute()
+  })
 }
 
 export const getSolarStatusTransition = (recordAt, previousStatus, now = Date.now()) => {

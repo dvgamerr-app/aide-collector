@@ -1,16 +1,13 @@
 import { Elysia, t } from 'elysia'
-import { sql } from 'kysely'
+
+import { setReminder } from '../reminders'
 
 const route = new Elysia({ prefix: '/reminder' })
 
 route.post(
   '/gold',
   async ({ body, db }) => {
-    await db
-      .insertInto('reminder')
-      .values({ name: 'gold', note: sql`${JSON.stringify(body)}::jsonb` })
-      .onConflict((oc) => oc.column('name').doUpdateSet({ note: sql`${JSON.stringify(body)}::jsonb` }))
-      .execute()
+    await setReminder(db, 'gold', body)
 
     return { success: true }
   },

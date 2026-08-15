@@ -14,9 +14,6 @@ const client = postgres(connString)
 
 export const db = new Kysely({ dialect: new PostgresJSDialect({ postgres: client }) })
 
-// kysely-postgres-js returns jsonb columns as raw strings; parse to objects on read.
-export const json = (v) => (typeof v === 'string' ? JSON.parse(v) : v)
-
 export async function connect() {
   await sql`SELECT 1`.execute(db)
   logger.info(` - database '${parseDatabaseUrl(connString).database}' connected`)

@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { sql } from 'kysely'
 
-import { json } from '../../db'
+import { parseJson } from '../../json'
 
 dayjs.extend(weekOfYear)
 
@@ -86,7 +86,7 @@ export const cinema = async ({ body, db, logger }) => {
       LEFT JOIN "stash"."cinema_showing" c ON c.s_name_en = d.name OR c.s_name_th = d.name;
     `.execute(db)
 
-    for (const row of duplica) row.theater = json(row.theater)
+    for (const row of duplica) row.theater = parseJson(row.theater)
     const { mergeKey, uniqueKey } = handleDuplicates(duplica)
     logger.info(`Remove duplicate ${mergeKey.length} keys.`)
     for (const c of mergeKey) {

@@ -1,6 +1,6 @@
 import { sql } from 'kysely'
 
-import { json } from '../../db'
+import { getReminder, setReminder } from '../../reminders'
 
 const ORIGIN = 'https://meaeservice.mea.or.th'
 const BASE = `${ORIGIN}/api/v1`
@@ -32,12 +32,7 @@ const signin = async (db) => {
   const res = await api('/signin/member', null, { body: atob(PAYLOAD), method: 'POST' })
   if (!res.ok) throw new Error(`signin failed: HTTP ${res.status}`)
   const { expire, token } = await res.json()
-  const note = sql`${JSON.stringify({ expire, token })}::jsonb`
-  await db
-    .insertInto('reminder')
-    .values({ name: 'mea_token', note })
-    .onConflict((oc) => oc.column('name').doUpdateSet({ note }))
-    .execute()
+  await setReminder(db, 'mea_token', { expire, token })
   return token
 }
 
@@ -81,8 +76,7 @@ export const mea = async ({ db, logger }) => {
   if (!PAYLOAD) return Response.json({ error: 'MEA_PAYLOAD (base64 of {username,password}) is required', success: false }, { status: 500 })
   try {
     // reuse cached token (60s margin); sign in again only if it's gone/expired or the first call is rejected
-    const row = await db.selectFrom('reminder').select('note').where('name', '=', 'mea_token').executeTakeFirst()
-    const cached = row && json(row.note)
+    const cached = await getReminder(db, 'mea_token')
     let token = cached?.expire > Date.now() + 60_000 ? cached.token : await signin(db)
 
     let res = await api('/member/getlist/group', token)

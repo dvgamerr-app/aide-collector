@@ -6,11 +6,13 @@ import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { Elysia, t } from 'elysia'
 import { sql } from 'kysely'
 
-import { json } from '../db'
+import { parseJson } from '../json'
+import { getReminder, setReminder } from '../reminders'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
 dayjs.extend(weekOfYear)
+dayjs.extend(relativeTime)
 
 const cinema = async ({ db, query }) => {
   const { genre, release_date, search, week, year } = query
@@ -43,35 +45,26 @@ const cinema = async ({ db, query }) => {
 
   return results.map((row) => ({
     ...row,
-    o_theater: Object.keys(json(row.o_theater)),
+    o_theater: Object.keys(parseJson(row.o_theater)),
     t_release: dayjs(row.t_release).tz('Asia/Bangkok').format('YYYY-MM-DD'),
   }))
 }
 
-const goldSpot = (entries, market) =>
-  (entries || []).reduce((total, entry) => total + (entry.oz || 0) * parseFloat(market.tout) + (entry.kg || 0) * parseFloat(market.tout), 0)
+const goldSpot = (entries, spotPrice) =>
+  (entries || []).reduce((total, entry) => total + (entry.oz || 0) * spotPrice + (entry.kg || 0) * spotPrice, 0)
 
-const gold = async ({ db, logger, query, store }) => {
-  dayjs.extend(relativeTime)
-  const traceId = store?.traceId
+const gold = async ({ db, logger, query, traceId }) => {
   const currency = query?.currency || 'USD'
 
-  let {
-    rows: [goldReminder],
-  } = await sql`SELECT r.note FROM reminder r WHERE name = 'gold'`.execute(db)
+  let goldReminder = await getReminder(db, 'gold')
 
   let {
     rows: [market],
   } = await sql`SELECT * FROM stash.gold ORDER BY updated_at DESC LIMIT 1`.execute(db)
 
   if (!goldReminder) {
-    const note = { deposit: 1, gold96: [], gold99: [{ oz: 1, usd: 0 }], wallet: 0 }
-    await db
-      .insertInto('reminder')
-      .values({ name: 'gold', note: sql`${JSON.stringify(note)}::jsonb` })
-      .onConflict((oc) => oc.column('name').doUpdateSet({ note: sql`${JSON.stringify(note)}::jsonb` }))
-      .execute()
-    goldReminder = { note }
+    goldReminder = { deposit: 1, gold96: [], gold99: [{ oz: 1, usd: 0 }], wallet: 0 }
+    await setReminder(db, 'gold', goldReminder)
   }
 
   if (!market) {
@@ -79,35 +72,33 @@ const gold = async ({ db, logger, query, store }) => {
     await db.insertInto('stash.gold').values(market).execute()
   }
 
-  market = Object.assign(market, {
+  const numericMarket = {
+    ...market,
     tin: parseFloat(market.tin),
     tout: parseFloat(market.tout),
     usd_buy: parseFloat(market.usd_buy),
     usd_sale: parseFloat(market.usd_sale),
-  })
+  }
 
-  const { deposit, gold96, gold99, wallet } = json(goldReminder.note)
+  const { deposit, gold96, gold99, wallet } = goldReminder
 
-  const costTotal = goldSpot(gold99, market) + goldSpot(gold96, market)
-  const depositTotal = deposit / market.usd_buy
+  const costTotal = goldSpot(gold99, numericMarket.tout) + goldSpot(gold96, numericMarket.tout)
+  const depositTotal = deposit / numericMarket.usd_buy
   const profitTotal = costTotal + wallet - depositTotal
   const profitPercent = Math.round((profitTotal / depositTotal) * 100 * 100) / 100
 
-  const trands = market.tout_ico === 'up' ? 'เพิ่มขึ้น' : 'ลดลง'
+  const trands = numericMarket.tout_ico === 'up' ? 'เพิ่มขึ้น' : 'ลดลง'
   logger.info(
-    `[${traceId}] 🪙 ${profitTotal > 0 ? 'กำไร' : 'ขาดทุน'} ${Math.round(profitTotal * parseFloat(market.usd_sale)).toLocaleString('th-TH')} บาท (${profitTotal > 0 ? '+' : ''}${profitPercent}%) ราคา${trands} `,
+    `[${traceId}] 🪙 ${profitTotal > 0 ? 'กำไร' : 'ขาดทุน'} ${Math.round(profitTotal * numericMarket.usd_sale).toLocaleString('th-TH')} บาท (${profitTotal > 0 ? '+' : ''}${profitPercent}%) ราคา${trands} `,
   )
 
-  delete market.tin
-  delete market.tin_ico
-
   return {
-    exchange: { buy: parseFloat(market.usd_buy), sale: parseFloat(market.usd_sale) },
+    exchange: { buy: numericMarket.usd_buy, sale: numericMarket.usd_sale },
     profitPercent,
-    profitTotal: Math.round(profitTotal * (currency === 'THB' ? market.usd_sale : 1) * 100) / 100,
-    spot: { tout: parseFloat(market.tout), tout_ico: market.tout_ico },
-    total: Math.round((costTotal + wallet) * (currency === 'THB' ? market.usd_buy : 1) * 100) / 100,
-    updated_at: dayjs(market.updated_at).fromNow(),
+    profitTotal: Math.round(profitTotal * (currency === 'THB' ? numericMarket.usd_sale : 1) * 100) / 100,
+    spot: { tout: numericMarket.tout, tout_ico: numericMarket.tout_ico },
+    total: Math.round((costTotal + wallet) * (currency === 'THB' ? numericMarket.usd_buy : 1) * 100) / 100,
+    updated_at: dayjs(numericMarket.updated_at).fromNow(),
   }
 }
 
