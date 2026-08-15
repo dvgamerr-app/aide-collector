@@ -4,12 +4,8 @@ import { getReminder, setReminder } from '../../reminders'
 
 const ORIGIN = 'https://eservicesapp.mwa.co.th'
 const LOGIN_URL = `${ORIGIN}/ESSecurity/v1/SecurityService/login`
-const ACCOUNT_URL = `${ORIGIN}/ESUserAccount/v1/UserAccountInfoService/getUserAccountInfoReceipt`
+const ACCOUNT_SERVICE_URL = `${ORIGIN}/ESUserAccount/v1/UserAccountInfoService`
 const PAYLOAD = Bun.env.MWA_PAYLOAD
-const ACCOUNT_CODES = (Bun.env.MWA_ACCOUNT_CODE || '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean)
 
 const request = async (url, init = {}) => {
   const options = {
@@ -113,6 +109,10 @@ export const mapMwaReceipts = (accountCode, receipts) =>
       vat_type: item.vatType || null,
     }))
 
+export const extractAccountCodes = (accounts) => [
+  ...new Set((accounts || []).map((account) => account.accountCode?.trim()).filter(Boolean)),
+]
+
 const signin = async (db) => {
   let body
   try {
@@ -128,18 +128,28 @@ const signin = async (db) => {
   const token = extractCookie(response.headers, 'ACCTOKEN')
   if (!token) throw new Error('login failed: ACCTOKEN cookie was not returned')
 
-  const expire = jwtExpiry(token)
-  await setReminder(db, 'mwa_token', { expire, token })
-  return token
+  const result = await response.json()
+  if (result.status !== 'OK' || !result.resultData?.userId) {
+    throw new Error(`login failed: ${result.message || result.status || 'invalid response'}`)
+  }
+
+  const session = { expire: jwtExpiry(token), token, userId: result.resultData.userId }
+  await setReminder(db, 'mwa_token', session)
+  return session
 }
 
-const getToken = async (db) => {
+const getSession = async (db) => {
   const cached = await getReminder(db, 'mwa_token')
-  return cached?.expire > Date.now() + 60_000 ? cached.token : signin(db)
+  return cached?.expire > Date.now() + 60_000 && cached.userId ? cached : signin(db)
 }
+
+const fetchAccounts = ({ token, userId }) =>
+  request(`${ACCOUNT_SERVICE_URL}/getListOfUserAccount/${encodeURIComponent(userId)}`, {
+    headers: { Cookie: `ACCTOKEN=${token}` },
+  })
 
 const fetchAccount = async (accountCode, token) =>
-  request(`${ACCOUNT_URL}/${encodeURIComponent(accountCode)}`, {
+  request(`${ACCOUNT_SERVICE_URL}/getUserAccountInfoReceipt/${encodeURIComponent(accountCode)}`, {
     headers: { Cookie: `ACCTOKEN=${token}` },
   })
 
@@ -199,20 +209,31 @@ export const mwa = async ({ db, logger }) => {
   if (!PAYLOAD) {
     return Response.json({ error: 'MWA_PAYLOAD (base64 of {userId,password}) is required', success: false }, { status: 500 })
   }
-  if (!ACCOUNT_CODES.length) {
-    return Response.json({ error: 'MWA_ACCOUNT_CODE is required', success: false }, { status: 500 })
-  }
 
   try {
-    let token = await getToken(db)
+    let session = await getSession(db)
+    let accountResponse = await fetchAccounts(session)
+    if (accountResponse.status === 401 || accountResponse.status === 403) {
+      logger.info('mwa token rejected, signing in again')
+      session = await signin(db)
+      accountResponse = await fetchAccounts(session)
+    }
+    if (!accountResponse.ok) throw new Error(`account list failed: HTTP ${accountResponse.status}`)
+
+    const accountResult = await accountResponse.json()
+    if (accountResult.status !== 'OK' || !Array.isArray(accountResult.resultData)) {
+      throw new Error(`account list failed: ${accountResult.message || accountResult.status || 'invalid response'}`)
+    }
+
+    const accountCodes = extractAccountCodes(accountResult.resultData)
     let bills = 0
 
-    for (const requestedAccountCode of ACCOUNT_CODES) {
-      let response = await fetchAccount(requestedAccountCode, token)
+    for (const requestedAccountCode of accountCodes) {
+      let response = await fetchAccount(requestedAccountCode, session.token)
       if (response.status === 401 || response.status === 403) {
         logger.info('mwa token rejected, signing in again')
-        token = await signin(db)
-        response = await fetchAccount(requestedAccountCode, token)
+        session = await signin(db)
+        response = await fetchAccount(requestedAccountCode, session.token)
       }
       if (!response.ok) throw new Error(`account receipt failed: HTTP ${response.status}`)
 
@@ -226,8 +247,8 @@ export const mwa = async ({ db, logger }) => {
       bills += await upsertReceipts(db, accountCode, account.debtAccountReceivable)
     }
 
-    logger.info(`mwa: ${ACCOUNT_CODES.length} accounts, ${bills} bills stored`)
-    return Response.json({ accounts: ACCOUNT_CODES.length, bills, success: true })
+    logger.info(`mwa: ${accountCodes.length} accounts, ${bills} bills stored`)
+    return Response.json({ accounts: accountCodes.length, bills, success: true })
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting mwa')
     return Response.json({ error: error.message, success: false }, { status: 500 })

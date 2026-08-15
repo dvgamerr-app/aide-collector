@@ -20,20 +20,19 @@ bun run dev
 
 ## ตัวแปรสภาพแวดล้อม
 
-| ตัวแปร                  | จำเป็น               | รายละเอียด                                                            |
-| ----------------------- | -------------------- | --------------------------------------------------------------------- |
-| `DATABASE_URL`          | ใช่                  | PostgreSQL connection string                                          |
-| `PORT`                  | ไม่                  | พอร์ตของ API ค่าเริ่มต้น `3000`                                       |
-| `LOG_LEVEL`             | ไม่                  | ระดับ log ของ Pino ค่าเริ่มต้น `info`                                 |
-| `MASTER_KEY`            | ไม่                  | key สำหรับ bootstrap/จัดการ token โดยไม่ต้องมี record ใน `api_keys`   |
-| `MEA_PAYLOAD`           | เฉพาะ MEA            | Base64 ของ JSON `{ "username", "password" }`                          |
-| `MWA_ACCOUNT_CODE`      | เฉพาะ MWA            | เลขบัญชีผู้ใช้น้ำ; รองรับหลายบัญชีโดยคั่นด้วย comma                   |
-| `MWA_PAYLOAD`           | เฉพาะ MWA            | Base64 ของ JSON `{ "userId", "password" }`                            |
-| `SOLAR_DEVICE_ID`       | เฉพาะ Solar          | device ID ที่จะรวบรวมข้อมูล                                           |
-| `SOLAR_OPEN_APP_ID`     | เฉพาะ Solar          | App ID ของ Solar Open API                                             |
-| `SOLAR_OPEN_APP_SECRET` | เฉพาะ Solar          | encrypted App Secret สำหรับลงลายเซ็น request                          |
-| `SOLAR_PAYLOAD`         | เฉพาะ Solar          | Base64 ของ JSON `{ "account", "password" }` โดย password เป็น MD5 hex |
-| `DISCORD_WEBHOOK`       | เฉพาะแจ้งเตือน Solar | webhook สำหรับแจ้งเมื่ออุปกรณ์ offline เกิน 15 นาทีและกลับมา online   |
+| ตัวแปร                  | จำเป็น               | รายละเอียด                                                             |
+| ----------------------- | -------------------- | ---------------------------------------------------------------------- |
+| `DATABASE_URL`          | ใช่                  | PostgreSQL connection string                                           |
+| `PORT`                  | ไม่                  | พอร์ตของ API ค่าเริ่มต้น `3000`                                        |
+| `LOG_LEVEL`             | ไม่                  | ระดับ log ของ Pino ค่าเริ่มต้น `info`                                  |
+| `MASTER_KEY`            | ไม่                  | key สำหรับ bootstrap/จัดการ token โดยไม่ต้องมี record ใน `api_keys`    |
+| `MEA_PAYLOAD`           | เฉพาะ MEA            | Base64 ของ JSON `{ "username", "password" }`                           |
+| `MWA_PAYLOAD`           | เฉพาะ MWA            | Base64 ของ JSON `{ "userId", "password" }`; ดึงทุกบัญชีที่ลงทะเบียนไว้ |
+| `SOLAR_DEVICE_ID`       | เฉพาะ Solar          | device ID ที่จะรวบรวมข้อมูล                                            |
+| `SOLAR_OPEN_APP_ID`     | เฉพาะ Solar          | App ID ของ Solar Open API                                              |
+| `SOLAR_OPEN_APP_SECRET` | เฉพาะ Solar          | encrypted App Secret สำหรับลงลายเซ็น request                           |
+| `SOLAR_PAYLOAD`         | เฉพาะ Solar          | Base64 ของ JSON `{ "account", "password" }` โดย password เป็น MD5 hex  |
+| `DISCORD_WEBHOOK`       | เฉพาะแจ้งเตือน Solar | webhook สำหรับแจ้งเมื่ออุปกรณ์ offline เกิน 15 นาทีและกลับมา online    |
 
 ## คำสั่งหลัก
 
@@ -66,7 +65,7 @@ bun run build           # bundle สำหรับ Bun ไปที่ build/in
 - `PATCH /stash/lottery` — ดึงผลรางวัลล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
 - `PATCH /stash/mea` — ดึงมิเตอร์และประวัติค่าไฟ MEA
-- `PATCH /stash/mwa` — login, ดึงประวัติใบเสร็จ/ค่าน้ำ MWA และบันทึกแบบ upsert
+- `PATCH /stash/mwa` — login, ดึงทุกบัญชีที่ลงทะเบียนพร้อมประวัติใบเสร็จ/ค่าน้ำ และบันทึกแบบ upsert
 - `PATCH /stash/solar?interval=1h` — ดึง timeseries ย้อนหลัง; รองรับหน่วย `m`/`h` และค่าเริ่มต้น 3 ชั่วโมง
 - `PATCH /stash/solar/bulk?date=YYYY-MM-DD` — เริ่ม backfill Solar รายวันและตอบ `202` ทันที
 - `POST /reminder/gold` — บันทึกข้อมูลการลงทุนทองสำหรับการคำนวณ collector

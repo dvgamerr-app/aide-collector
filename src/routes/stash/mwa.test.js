@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { extractCookie, jwtExpiry, mapMwaReceipts, parseMwaDate } from './mwa'
+import { extractAccountCodes, extractCookie, jwtExpiry, mapMwaReceipts, parseMwaDate } from './mwa'
 
 describe('MWA authentication helpers', () => {
   it('reads ACCTOKEN from response Set-Cookie headers', () => {
@@ -18,6 +18,13 @@ describe('MWA authentication helpers', () => {
       .replace(/\//g, '_')
 
     expect(jwtExpiry(`header.${payload}.signature`)).toBe(1_800_000_000_000)
+  })
+
+  it('extracts every distinct registered account code', () => {
+    expect(extractAccountCodes([{ accountCode: ' account-1 ' }, { accountCode: 'account-2' }, { accountCode: 'account-1' }, {}])).toEqual([
+      'account-1',
+      'account-2',
+    ])
   })
 })
 
