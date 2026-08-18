@@ -4,10 +4,10 @@ LABEL org.opencontainers.image.source="https://github.com/dvgamerr-app/aide-coll
 
 WORKDIR /app
 
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 COPY ./src/ ./src/
 
-RUN bun i --ignore-scripts --production
+RUN bun install --frozen-lockfile --ignore-scripts --production
 
 EXPOSE 3000
 CMD ["bun", "/app/src/index.js"]
