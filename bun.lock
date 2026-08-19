@@ -11,6 +11,7 @@
         "kysely": "latest",
         "kysely-postgres-js": "latest",
         "pino": "latest",
+        "pino-pretty": "latest",
         "postgres": "latest",
       },
       "devDependencies": {
@@ -23,7 +24,6 @@
         "globals": "latest",
         "husky": "latest",
         "lint-staged": "latest",
-        "pino-pretty": "latest",
         "prettier": "latest",
       },
     },

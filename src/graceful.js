@@ -20,7 +20,7 @@ const shutdown = async (signal, handler) => {
     logger.info('Graceful shutdown completed')
     process.exit(0)
   } catch (error) {
-    logger.error('Error during graceful shutdown', { error: error.message })
+    logger.error({ error: error.message }, 'Error during graceful shutdown')
     process.exit(1)
   } finally {
     clearTimeout(shutdownTimer)
@@ -34,12 +34,12 @@ export const setupGracefulShutdown = (handler) => {
   signals.forEach((signal) => process.once(signal, () => shutdown(signal, handler)))
 
   process.once('uncaughtException', (error) => {
-    logger.error('Uncaught exception', { error: error.message, stack: error.stack })
+    logger.error({ error: error.message, stack: error.stack }, 'Uncaught exception')
     shutdown('uncaughtException', handler)
   })
 
   process.once('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled rejection', { promise, reason })
+    logger.error({ promise, reason }, 'Unhandled rejection')
     shutdown('unhandledRejection', handler)
   })
 }

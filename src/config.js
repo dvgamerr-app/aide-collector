@@ -8,6 +8,10 @@ export const userAgent = `aide-${name}/${version}`
 
 export const logger = pino({
   level: Bun.env.LOG_LEVEL || 'info',
+  transport: {
+    options: { errorLikeObjectKeys: [], singleLine: true },
+    target: 'pino-pretty',
+  },
 })
 
 export const parseDatabaseUrl = (url) => {
