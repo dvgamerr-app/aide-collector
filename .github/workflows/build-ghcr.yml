@@ -97,8 +97,10 @@ jobs:
 
       - name: Start new container
         run: |
+          container rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
           container run -d \
             --name ${{ env.CONTAINER_NAME }} \
+            --cpus 1 --memory 512M \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
             -e DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }} \
             -e MEA_PAYLOAD=${{ secrets.MEA_PAYLOAD }} \
