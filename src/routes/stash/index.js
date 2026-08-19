@@ -20,7 +20,7 @@ route.patch('/lottery', lottery, {
 })
 route.patch('/mea', mea, {
   detail: {
-    description: 'fetch member meters and electric bill history, and store them.',
+    description: 'Fetch member meters, electric bill history and payment history, and store them.',
     summary: 'Stash MEA electric',
     tags: ['Stash'],
   },

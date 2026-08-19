@@ -50,4 +50,4 @@ bun run build
 git diff --check
 ```
 
-Current expected test inventory after this update: 16 tests across middleware, lottery/MWA mapping, token authorization and Solar device-status transitions.
+Current expected test inventory after this update: 21 tests across middleware, lottery/MEA/MWA mapping, token authorization and Solar device-status transitions.

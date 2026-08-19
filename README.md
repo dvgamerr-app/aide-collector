@@ -64,7 +64,7 @@ bun run build           # bundle สำหรับ Bun ไปที่ build/in
 - `PATCH /stash/gold` — ดึงราคาทองล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery` — ดึงผลรางวัลล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
-- `PATCH /stash/mea` — ดึงมิเตอร์และประวัติค่าไฟ MEA
+- `PATCH /stash/mea` — ดึงมิเตอร์ ประวัติค่าไฟ และประวัติการชำระย้อนหลังแยกรายเดือน โดยจับคู่ `billNo` แบบคงเลขศูนย์นำหน้า
 - `PATCH /stash/mwa` — login, ดึงทุกบัญชีที่ลงทะเบียนพร้อมประวัติใบเสร็จ/ค่าน้ำ และบันทึกแบบ upsert
 - `PATCH /stash/solar?interval=1h` — ดึง timeseries ย้อนหลัง; รองรับหน่วย `m`/`h` และค่าเริ่มต้น 3 ชั่วโมง
 - `PATCH /stash/solar/bulk?date=YYYY-MM-DD` — เริ่ม backfill Solar รายวันและตอบ `202` ทันที
