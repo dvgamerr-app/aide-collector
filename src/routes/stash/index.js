@@ -42,16 +42,18 @@ route.patch('/lottery/bulk', lotteryBulk, {
 })
 route.patch('/solar', solar, {
   detail: {
-    description: 'Fetch a trailing solar device attribute timeseries window (3 hours by default) and upsert.',
-    summary: 'Stash solar production',
+    description:
+      'Collect Solar history/latest state, alarms, device details, energy flow, config snapshots and station summaries (3-hour history by default).',
+    summary: 'Stash all Solar data sources',
     tags: ['Stash'],
   },
   query: t.Object({ interval: t.Optional(t.String({ description: 'Trailing window such as 30m or 1h', examples: ['1h'] })) }),
 })
 route.patch('/solar/bulk', solarBulk, {
   detail: {
-    description: 'Backfill solar attribute timeseries from today back to the given date (sequential, 1 req/s/day).',
-    summary: 'Stash solar bulk',
+    description:
+      'Backfill Solar record/key history and station daily/monthly/yearly summaries, then refresh all current-only data sources.',
+    summary: 'Backfill Solar history',
     tags: ['Stash'],
   },
   query: t.Object({ date: t.String({ description: 'Target date YYYY-MM-DD to backfill to', examples: ['2025-01-01'] }) }),

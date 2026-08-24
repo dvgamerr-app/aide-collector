@@ -1,143 +1,195 @@
 import dayjs from 'dayjs'
 
 import { getReminder, setReminder } from '../../../reminders'
-import { openSign } from './sign'
+import {
+  fetchAlarms,
+  fetchConfigs,
+  fetchDeviceDetails,
+  fetchEnergyFlow,
+  fetchKeyHistory,
+  fetchLatestState,
+  fetchRecordHistory,
+  fetchStationCategoryDaily,
+  fetchStationCategoryMonthly,
+  fetchStationCategoryYearly,
+  fetchStationGeneratedMonthly,
+  fetchStationGeneratedTotal,
+  fetchStationGeneratedYearly,
+  getSolarToken,
+  missingSolarEnv,
+} from './api'
+import {
+  mapAlarms,
+  mapCategorySummary,
+  mapConfigSnapshots,
+  mapDeviceSnapshot,
+  mapEnergyFlow,
+  mapGeneratedSummary,
+  mapKeyHistoryPayload,
+  mapRecordPayload,
+  mapStatePayload,
+} from './mappers'
+import {
+  insertSolarConfigSnapshots,
+  insertSolarDeviceSnapshot,
+  upsertSolarAlarms,
+  upsertSolarEnergyFlow,
+  upsertSolarLatestState,
+  upsertSolarRecords,
+  upsertSolarStationSummaries,
+} from './storage'
 
-const ORIGIN = 'https://solar.siseli.com'
-const BASE = `${ORIGIN}/apis`
-
-const APP_ID = Bun.env.SOLAR_OPEN_APP_ID
-const APP_SECRET = Bun.env.SOLAR_OPEN_APP_SECRET
-// ponytail: base64 of {"account","password"} (password is md5 hex) — same shape as MEA_PAYLOAD
-const PAYLOAD = Bun.env.SOLAR_PAYLOAD
 const DEVICE_ID = Bun.env.SOLAR_DEVICE_ID
-
-const PAGE = 300 // records/page. 5-min cadence -> 288/day, so a full day fits in one page
-// trailing window for the hourly job. 5-min cadence + overlap tolerates ~2 missed runs; upsert dedups overlap
 const LOOKBACK_HOURS = 3
 const OFFLINE_AFTER_MS = 15 * 60 * 1000
 const STATUS_REMINDER = 'solar_device_status'
 
-const COMMON = {
-  Accept: 'application/json',
-  'Accept-Language': 'en',
-  'Content-Type': 'application/json; charset=utf-8',
-  'IOT-Time-Zone': 'Asia/Bangkok',
-  Origin: ORIGIN,
-  Referer: `${ORIGIN}/`,
-}
-
-const missingEnv = () => {
-  const need = { SOLAR_DEVICE_ID: DEVICE_ID, SOLAR_OPEN_APP_ID: APP_ID, SOLAR_OPEN_APP_SECRET: APP_SECRET, SOLAR_PAYLOAD: PAYLOAD }
-  const miss = Object.keys(need).filter((k) => !need[k])
-  return miss.length ? `missing env: ${miss.join(', ')}` : null
-}
-
-// today's date in Bangkok (YYYY-MM-DD) without pulling a tz plugin; day boundary as the API expects it
 const bkkDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
-const dayBound = (ymd) => `${ymd}T00:00:00+07:00`
-// Bangkok wall-clock instant with +07:00 offset (UTC + 7h relabelled), for sub-day windows
-const bkkTime = (ms) => new Date(ms + 7 * 3600e3).toISOString().replace(/\.\d{3}Z$/, '+07:00')
+const bkkTime = (milliseconds) => new Date(milliseconds + 7 * 3600e3).toISOString().replace(/\.\d{3}Z$/, '+07:00')
+const dayBound = (date) => `${date}T00:00:00+07:00`
+const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 const trailing = (hours) => [bkkTime(Date.now() - hours * 3600e3), bkkTime(Date.now() + 5 * 60e3)]
 
-// open-signed POST (login / refresh). Platform wraps everything as { code, data, msg }; code 0 = ok.
-const openPost = async (path, body) => {
-  const headers = { ...COMMON, 'IOT-Token': 'null', ...openSign({ appId: APP_ID, body, encSecret: APP_SECRET, method: 'POST' }) }
-  const res = await fetch(`${BASE}${path}`, { body, headers, method: 'POST' })
-  const data = await res.json()
-  if (data.code !== 0) throw new Error(`${path} failed: code ${data.code} ${data.msg || ''}`)
-  return data.data
+const mapPayloads = (deviceId, payloads, mapper) => payloads.flatMap((payload) => mapper(deviceId, payload))
+
+const dedupeRecords = (rows) => [...new Map(rows.map((row) => [`${row.device_id}\u0000${row.attr}\u0000${row.recorded_at}`, row])).values()]
+
+const currentStationRows = async (token, stationId, date) => {
+  const month = date.slice(0, 7)
+  const year = date.slice(0, 4)
+  const [daily, monthly, yearly, generatedMonthly, generatedYearly, generatedTotal] = await Promise.all([
+    fetchStationCategoryDaily(token, stationId, date),
+    fetchStationCategoryMonthly(token, stationId, month),
+    fetchStationCategoryYearly(token, stationId, year),
+    fetchStationGeneratedMonthly(token, stationId, month),
+    fetchStationGeneratedYearly(token, stationId, year),
+    fetchStationGeneratedTotal(token, stationId),
+  ])
+
+  return [
+    ...mapCategorySummary(stationId, 'category_daily', daily),
+    ...mapCategorySummary(stationId, 'category_monthly', monthly),
+    ...mapCategorySummary(stationId, 'category_yearly', yearly),
+    ...mapGeneratedSummary(stationId, 'generated_monthly', generatedMonthly),
+    ...mapGeneratedSummary(stationId, 'generated_yearly', generatedYearly),
+    ...mapGeneratedSummary(stationId, 'generated_total', generatedTotal),
+  ]
 }
 
-// token-authed POST. Returns the raw envelope so the caller can react to an auth-expired code.
-const apiPost = async (path, token, body) => {
-  const res = await fetch(`${BASE}${path}`, { body, headers: { ...COMMON, 'IOT-Token': token }, method: 'POST' })
-  const data = await res.json()
-  return { code: data.code, data: data.data }
-}
+const collectCurrent = async (db, token, fromTime, toTime) => {
+  const observedAt = new Date().toISOString()
+  const date = bkkDate()
+  const details = await fetchDeviceDetails(token, DEVICE_ID)
+  const stationId = details?.stationId == null ? null : String(details.stationId)
+  if (!stationId) throw new Error('device details did not include stationId')
 
-const storeToken = async (db, d) => {
-  const tk = {
-    accessExpire: d.accessTokenWillExpiredAt,
-    accessToken: d.accessToken,
-    refreshExpire: d.refreshTokenWillExpiredAt,
-    refreshToken: d.refreshToken,
+  const [recordHistory, keyHistory] = await Promise.all([
+    fetchRecordHistory(token, DEVICE_ID, fromTime, toTime),
+    fetchKeyHistory(token, DEVICE_ID, fromTime, toTime),
+  ])
+  const [alarms, latestState, energyFlow, configs, stationRows] = await Promise.all([
+    fetchAlarms(token, DEVICE_ID),
+    fetchLatestState(token, DEVICE_ID),
+    fetchEnergyFlow(token, DEVICE_ID),
+    fetchConfigs(token, DEVICE_ID),
+    currentStationRows(token, stationId, date),
+  ])
+
+  const recordRows = mapPayloads(DEVICE_ID, recordHistory.payloads, mapRecordPayload)
+  const keyRows = mapPayloads(DEVICE_ID, keyHistory.payloads, mapKeyHistoryPayload)
+  const latestRows = mapStatePayload(DEVICE_ID, latestState, 'latest_state')
+  const flowStateRows = mapStatePayload(DEVICE_ID, energyFlow?.deviceAttributeState, 'energy_flow_state')
+  const telemetryRows = dedupeRecords([...keyRows, ...recordRows, ...latestRows, ...flowStateRows])
+  const alarmRows = mapAlarms(alarms, observedAt)
+  const configRows = mapConfigSnapshots(DEVICE_ID, configs, observedAt)
+  const deviceRow = mapDeviceSnapshot(details, observedAt)
+  const energyFlowRow = mapEnergyFlow(DEVICE_ID, energyFlow, observedAt)
+
+  const counts = await db.transaction().execute(async (transaction) => ({
+    alarms: await upsertSolarAlarms(transaction, alarmRows),
+    configSnapshots: await insertSolarConfigSnapshots(transaction, configRows),
+    deviceSnapshots: await insertSolarDeviceSnapshot(transaction, deviceRow),
+    energyFlowSnapshots: await upsertSolarEnergyFlow(transaction, energyFlowRow),
+    latestStateSnapshots: await upsertSolarLatestState(transaction, DEVICE_ID, latestState, observedAt),
+    stationSummaryRows: await upsertSolarStationSummaries(transaction, stationRows),
+    telemetryRows: await upsertSolarRecords(transaction, telemetryRows),
+  }))
+
+  return {
+    counts,
+    points: { keyHistory: keyHistory.points, recordHistory: recordHistory.points },
+    stationId,
   }
-  await setReminder(db, 'solar_token', tk)
-  return tk
 }
 
-const login = async (db) => storeToken(db, await openPost('/login/account', atob(PAYLOAD)))
+const collectHistoricalDay = async (db, token, stationId, date) => {
+  const next = dayjs(date).add(1, 'day').format('YYYY-MM-DD')
+  const [recordHistory, keyHistory, dailySummary] = await Promise.all([
+    fetchRecordHistory(token, DEVICE_ID, dayBound(date), dayBound(next)),
+    fetchKeyHistory(token, DEVICE_ID, dayBound(date), dayBound(next)),
+    fetchStationCategoryDaily(token, stationId, date),
+  ])
 
-const refresh = async (db, tk) =>
-  storeToken(
-    db,
-    await openPost('/login/refresh/access/token', JSON.stringify({ accessToken: tk.accessToken, refreshToken: tk.refreshToken })),
-  )
+  const telemetryRows = dedupeRecords([
+    ...mapPayloads(DEVICE_ID, keyHistory.payloads, mapKeyHistoryPayload),
+    ...mapPayloads(DEVICE_ID, recordHistory.payloads, mapRecordPayload),
+  ])
+  const stationRows = mapCategorySummary(stationId, 'category_daily', dailySummary)
 
-// reuse cached token (60s margin); refresh when access expired, full login when refresh also expired.
-// ponytail: assumes *WillExpiredAt are epoch-ms (matches the MEA token cache convention)
-const getToken = async (db) => {
-  const tk = await getReminder(db, 'solar_token')
-  const now = Date.now() + 60_000
-  if (!tk) return login(db)
-  if (tk.accessExpire > now) return tk
-  if (tk.refreshExpire > now) {
-    try {
-      return await refresh(db, tk)
-    } catch {
-      return login(db)
-    }
+  return db.transaction().execute(async (transaction) => ({
+    keyPoints: keyHistory.points,
+    recordPoints: recordHistory.points,
+    stationRows: await upsertSolarStationSummaries(transaction, stationRows),
+    telemetryRows: await upsertSolarRecords(transaction, telemetryRows),
+  }))
+}
+
+const collectHistoricalPeriods = async (db, logger, stationId, targetDate) => {
+  const currentDate = bkkDate()
+  const total = { stationRows: 0 }
+  let month = dayjs(targetDate).startOf('month')
+  const lastMonth = dayjs(currentDate).startOf('month')
+
+  while (!month.isAfter(lastMonth, 'month')) {
+    const token = await getSolarToken(db)
+    const value = month.format('YYYY-MM')
+    const [category, generated] = await Promise.all([
+      fetchStationCategoryMonthly(token.accessToken, stationId, value),
+      fetchStationGeneratedMonthly(token.accessToken, stationId, value),
+    ])
+    const rows = [
+      ...mapCategorySummary(stationId, 'category_monthly', category),
+      ...mapGeneratedSummary(stationId, 'generated_monthly', generated),
+    ]
+    total.stationRows += await upsertSolarStationSummaries(db, rows)
+    logger.info(`bulk solar station month ${value}: ${rows.length} rows`)
+    month = month.add(1, 'month')
+    await pause(250)
   }
-  return login(db)
-}
 
-// columnar payload -> EAV rows: timeSeries[i] is the timestamp, fields[attr][i].vd the value at that time.
-// non-numeric attrs (firmwareVersion, productSerialNumber, batteryStatus, ...) drop out — they're device
-// metadata, not timeseries metrics. timeSeries timestamps are UTC ("...Z"); timestamptz stores the instant.
-const mapPayload = (deviceId, payload) => {
-  const times = payload?.timeSeries || []
-  const rows = []
-  for (const [attr, series] of Object.entries(payload?.fields || {})) {
-    for (let i = 0; i < times.length; i++) {
-      const value = Number(series[i]?.vd)
-      if (Number.isFinite(value)) rows.push({ attr, device_id: deviceId, recorded_at: times[i], value })
-    }
+  let year = dayjs(targetDate).startOf('year')
+  const lastYear = dayjs(currentDate).startOf('year')
+  while (!year.isAfter(lastYear, 'year')) {
+    const token = await getSolarToken(db)
+    const value = year.format('YYYY')
+    const [category, generated] = await Promise.all([
+      fetchStationCategoryYearly(token.accessToken, stationId, value),
+      fetchStationGeneratedYearly(token.accessToken, stationId, value),
+    ])
+    const rows = [
+      ...mapCategorySummary(stationId, 'category_yearly', category),
+      ...mapGeneratedSummary(stationId, 'generated_yearly', generated),
+    ]
+    total.stationRows += await upsertSolarStationSummaries(db, rows)
+    logger.info(`bulk solar station year ${value}: ${rows.length} rows`)
+    year = year.add(1, 'year')
+    await pause(250)
   }
-  return rows
-}
 
-// paginate one time window fully. ponytail: 500-page cap as a runaway guard
-const fetchRows = async (token, deviceId, fromTime, toTime) => {
-  const rows = []
-  let points = 0
-  for (let page = 1; page <= 500; page++) {
-    const body = JSON.stringify({ count: PAGE, deviceId, fromTime, orderByTimeAsc: false, page, toTime })
-    const { code, data } = await apiPost('/deviceState/simple/attribute/record/list/v1', token, body)
-    if (code !== 0) throw new Error(`record list failed: code ${code}`)
-    const got = data?.payload?.timeSeries?.length || 0
-    rows.push(...mapPayload(deviceId, data?.payload))
-    points += got
-    if (got < PAGE) break
-  }
-  return { points, rows }
-}
-
-const upsertRecords = async (db, rows) => {
-  if (!rows.length) return 0
-  for (let i = 0; i < rows.length; i += 1000) {
-    await db
-      .insertInto('stash.solar_record')
-      .values(rows.slice(i, i + 1000))
-      .onConflict((oc) => oc.columns(['device_id', 'attr', 'recorded_at']).doUpdateSet((eb) => ({ value: eb.ref('excluded.value') })))
-      .execute()
-  }
-  return rows.length
-}
-
-const collect = async (db, token, fromTime, toTime) => {
-  const { points, rows } = await fetchRows(token, DEVICE_ID, fromTime, toTime)
-  return { points, rows: await upsertRecords(db, rows) }
+  const token = await getSolarToken(db)
+  const generatedTotal = await fetchStationGeneratedTotal(token.accessToken, stationId)
+  total.stationRows += await upsertSolarStationSummaries(db, mapGeneratedSummary(stationId, 'generated_total', generatedTotal))
+  return total
 }
 
 const sendDiscordStatus = async (webhookUrl, status, deviceId, lastRecordAt) => {
@@ -204,31 +256,29 @@ export const checkSolarDeviceStatus = async ({
   return status
 }
 
-// "1h" -> 1, "30m" -> 0.5, invalid -> null
-const parseInterval = (s) => {
-  const m = /^(\d+)(h|m)$/.exec(s || '')
-  if (!m) return null
-  return m[2] === 'h' ? Number(m[1]) : Number(m[1]) / 60
+const parseInterval = (value) => {
+  const match = /^(\d+)(h|m)$/.exec(value || '')
+  if (!match) return null
+  return match[2] === 'h' ? Number(match[1]) : Number(match[1]) / 60
 }
 
-// incremental: pull the last LOOKBACK_HOURS only — sized to the hourly job, not a full day
 export const solar = async ({ db, logger, query }) => {
-  const miss = missingEnv()
-  if (miss) return Response.json({ error: miss, success: false }, { status: 500 })
+  const missing = missingSolarEnv(DEVICE_ID)
+  if (missing) return Response.json({ error: missing, success: false }, { status: 500 })
+
   const hours = parseInterval(query?.interval) ?? LOOKBACK_HOURS
   let result
   try {
-    const token = await getToken(db)
-    const [from, to] = trailing(hours)
-    const { points, rows } = await collect(db, token.accessToken, from, to)
-    logger.info(`solar: ${rows} rows from ${points} points (last ${hours}h)`)
-    result = { body: { points, rows, success: true }, status: 200 }
+    const token = await getSolarToken(db)
+    const [fromTime, toTime] = trailing(hours)
+    const collected = await collectCurrent(db, token.accessToken, fromTime, toTime)
+    logger.info({ ...collected.counts, ...collected.points }, `solar: collected all sources (last ${hours}h)`)
+    result = { body: { counts: collected.counts, points: collected.points, success: true }, status: 200 }
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting solar')
     result = { body: { error: error.message, success: false }, status: 500 }
   }
 
-  // Run after every collection attempt, including a failed API request, so stale records can trigger Offline.
   try {
     await checkSolarDeviceStatus({ db, logger })
   } catch (error) {
@@ -240,49 +290,40 @@ export const solar = async ({ db, logger, query }) => {
 
 const runBulk = async (db, logger, targetDate) => {
   let cursor = bkkDate()
-  let total = 0
+  const total = { keyPoints: 0, recordPoints: 0, stationRows: 0, telemetryRows: 0 }
+
   try {
-    // ponytail: sequential day-by-day backfill, 1 req/sec between days; refresh token per day for long runs
+    const firstToken = await getSolarToken(db)
+    const [fromTime, toTime] = trailing(LOOKBACK_HOURS)
+    const current = await collectCurrent(db, firstToken.accessToken, fromTime, toTime)
+
     while (cursor >= targetDate) {
-      const token = await getToken(db)
-      const next = dayjs(cursor).add(1, 'day').format('YYYY-MM-DD')
-      const { rows } = await collect(db, token.accessToken, dayBound(cursor), dayBound(next))
-      total += rows
-      logger.info(`bulk solar ${cursor}: ${rows} rows (total ${total}, until ${targetDate})`)
+      const token = await getSolarToken(db)
+      const result = await collectHistoricalDay(db, token.accessToken, current.stationId, cursor)
+      for (const key of Object.keys(total)) total[key] += result[key] || 0
+      logger.info({ ...result, date: cursor, targetDate }, 'bulk solar day stored')
       cursor = dayjs(cursor).subtract(1, 'day').format('YYYY-MM-DD')
-      await new Promise((r) => setTimeout(r, 1000))
+      if (cursor >= targetDate) await pause(1000)
     }
-    logger.info(`bulk solar done: ${total} rows until ${targetDate}`)
+
+    const periodResult = await collectHistoricalPeriods(db, logger, current.stationId, targetDate)
+    total.stationRows += periodResult.stationRows
+    logger.info({ ...total, targetDate }, 'bulk solar done')
   } catch (error) {
-    logger.error(`bulk solar failed at ${cursor}: ${error.message} (total ${total}, until ${targetDate})`)
+    logger.error({ ...total, error: error.message, failedAt: cursor, targetDate }, 'bulk solar failed')
   }
 }
 
-// ponytail: return 202 immediately — backfill takes minutes, can't block the request (like lottery bulk)
 export const solarBulk = async ({ db, logger, query }) => {
-  const miss = missingEnv()
-  if (miss) return Response.json({ error: miss, success: false }, { status: 500 })
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(query.date)) {
-    return Response.json({ error: 'date query param required (YYYY-MM-DD)', success: false }, { status: 400 })
-  }
-  void runBulk(db, logger, query.date)
-  return new Response(null, { status: 202 })
-}
+  const missing = missingSolarEnv(DEVICE_ID)
+  if (missing) return Response.json({ error: missing, success: false }, { status: 500 })
 
-// self-check: columnar payload maps to one row per (attr, time) with index alignment; non-numeric dropped.
-// run: bun src/routes/stash/solar/index.js
-if (import.meta.main) {
-  const sample = {
-    fields: {
-      batteryStatus: [{ vd: 'Idle' }, { vd: 'Idle' }], // non-numeric -> dropped
-      pv1Power: [{ vd: '0' }, { vd: '0' }],
-      pv1Voltage: [{ vd: '11.5' }, { vd: '11.8' }],
-    },
-    timeSeries: ['2026-06-10T16:56:16Z', '2026-06-10T16:51:15Z'],
+  const targetDate = query.date
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(targetDate) && dayjs(targetDate).format('YYYY-MM-DD') === targetDate
+  if (!validDate || targetDate > bkkDate()) {
+    return Response.json({ error: 'date query param must be a valid past/current date (YYYY-MM-DD)', success: false }, { status: 400 })
   }
-  const rows = mapPayload('dev1', sample)
-  if (rows.length !== 4) throw new Error(`expected 4 rows (2 numeric attrs x 2 times), got ${rows.length}`)
-  const v = rows.find((r) => r.attr === 'pv1Voltage' && r.recorded_at === '2026-06-10T16:51:15Z')
-  if (v?.value !== 11.8) throw new Error(`index alignment broken: ${JSON.stringify(v)}`)
-  console.log('solar mapPayload self-check OK')
+
+  void runBulk(db, logger, targetDate)
+  return new Response(null, { status: 202 })
 }

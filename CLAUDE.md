@@ -37,6 +37,7 @@ The build output is `build/index.js` and is ignored by Git. Use `bun run lint:fi
 - Added read-only `test`, `lint`, `format`, and production `build` package scripts so local and CI verification use stable commands.
 - Excluded generated `build/**` bundles in the flat ESLint config so lint results cover source files consistently even after a local build.
 - Corrected README setup: migrations are explicit, documented all MEA/Solar environment variables and current endpoints, and updated the Solar route description to its trailing-window behavior.
+- Extended Solar persistence beyond numeric record-list values: string/raw telemetry, alarms, device/latest/energy-flow/config snapshots and station summaries now have queryable schemas; the bulk job backfills record/key history plus daily/monthly/yearly station buckets.
 
 ## Verification
 
@@ -50,4 +51,4 @@ bun run build
 git diff --check
 ```
 
-Current expected test inventory after this update: 21 tests across middleware, lottery/MEA/MWA mapping, token authorization and Solar device-status transitions.
+Current expected test inventory after this update: 26 tests across middleware, lottery/MEA/MWA/Solar mapping, token authorization and Solar device-status transitions.
