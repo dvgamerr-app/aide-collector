@@ -10,7 +10,7 @@ on:
 
 jobs:
   api:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -25,7 +25,7 @@ jobs:
       IMAGE_OWNER: dvgamerr-app
       IMAGE_FILE: Dockerfile
       IMAGE_NAME: aide-collector
-      PLATFORMS: linux/amd64,linux/arm64
+      PLATFORMS: linux/arm64
 
     steps:
       - name: Checkout repository
@@ -102,7 +102,6 @@ jobs:
             --name ${{ env.CONTAINER_NAME }} \
             --cpus 1 --memory 512M \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-            -e DISCORD_WEBHOOK=${{ secrets.DISCORD_WEBHOOK }} \
             -e MEA_PAYLOAD=${{ secrets.MEA_PAYLOAD }} \
             -e MWA_PAYLOAD=${{ secrets.MWA_PAYLOAD }} \
             -e SOLAR_DEVICE_ID=${{ vars.SOLAR_DEVICE_ID }} \

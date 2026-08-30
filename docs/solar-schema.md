@@ -1,5 +1,7 @@
 # Solar collector schema
 
+สำหรับสรุปเพื่อทำหน้าเว็บและแนวทางออกแบบ UI/read API ดู [`solar-web-handoff.md`](solar-web-handoff.md)
+
 Collector ใช้ device จาก `SOLAR_DEVICE_ID` และเก็บข้อมูลจาก Solar portal ทั้ง 7 กลุ่ม นอกเหนือจาก record-list เดิม โดย migration อยู่ที่ `src/migrations/008_solar_extended.js`
 
 ## ตาราง

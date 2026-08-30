@@ -1,6 +1,5 @@
 import dayjs from 'dayjs'
 
-import { getReminder, setReminder } from '../../../reminders'
 import {
   fetchAlarms,
   fetchConfigs,
@@ -41,8 +40,6 @@ import {
 
 const DEVICE_ID = Bun.env.SOLAR_DEVICE_ID
 const LOOKBACK_HOURS = 3
-const OFFLINE_AFTER_MS = 15 * 60 * 1000
-const STATUS_REMINDER = 'solar_device_status'
 
 const bkkDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
 const bkkTime = (milliseconds) => new Date(milliseconds + 7 * 3600e3).toISOString().replace(/\.\d{3}Z$/, '+07:00')
@@ -192,70 +189,6 @@ const collectHistoricalPeriods = async (db, logger, stationId, targetDate) => {
   return total
 }
 
-const sendDiscordStatus = async (webhookUrl, status, deviceId, lastRecordAt) => {
-  if (!webhookUrl) throw new Error('missing env: DISCORD_WEBHOOK')
-  const detail = lastRecordAt ? ` (ข้อมูลล่าสุด: ${lastRecordAt.toISOString()})` : ' (ยังไม่พบข้อมูล)'
-  const content = status === 'offline' ? `🔴 อุปกรณ์ ${deviceId} ออฟไลน์${detail}` : `🟢 อุปกรณ์ ${deviceId} กลับมาออนไลน์แล้ว`
-  const response = await fetch(webhookUrl, {
-    body: JSON.stringify({ content }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  })
-  if (!response.ok) throw new Error(`Discord webhook failed: HTTP ${response.status}`)
-}
-
-const latestRecordAt = async (db, deviceId) => {
-  const row = await db
-    .selectFrom('stash.solar_record')
-    .select((eb) => eb.fn.max('recorded_at').as('recorded_at'))
-    .where('device_id', '=', deviceId)
-    .executeTakeFirst()
-  return row?.recorded_at ? new Date(row.recorded_at) : null
-}
-
-const storedDeviceStatus = (db) => getReminder(db, STATUS_REMINDER)
-
-const storeDeviceStatus = async (db, deviceId, status, recordAt, now) => {
-  await setReminder(db, STATUS_REMINDER, {
-    changedAt: new Date(now).toISOString(),
-    deviceId,
-    lastRecordAt: recordAt?.toISOString() || null,
-    status,
-  })
-}
-
-export const getSolarStatusTransition = (recordAt, previousStatus, now = Date.now()) => {
-  const status = recordAt && now - recordAt.getTime() < OFFLINE_AFTER_MS ? 'online' : 'offline'
-  const shouldNotify = previousStatus !== status && !(status === 'online' && previousStatus !== 'offline')
-  return { shouldNotify, status }
-}
-
-export const checkSolarDeviceStatus = async ({
-  db,
-  deviceId = DEVICE_ID,
-  logger,
-  notify = sendDiscordStatus,
-  now = Date.now(),
-  webhookUrl = Bun.env.DISCORD_WEBHOOK,
-}) => {
-  const recordAt = await latestRecordAt(db, deviceId)
-  const previous = await storedDeviceStatus(db)
-  const previousStatus = previous?.deviceId === deviceId ? previous.status : undefined
-  const { shouldNotify, status } = getSolarStatusTransition(recordAt, previousStatus, now)
-
-  if (previousStatus === status) return status
-
-  if (!shouldNotify) {
-    await storeDeviceStatus(db, deviceId, status, recordAt, now)
-    return status
-  }
-
-  await notify(webhookUrl, status, deviceId, recordAt)
-  await storeDeviceStatus(db, deviceId, status, recordAt, now)
-  logger.info(`solar device ${deviceId}: ${status}`)
-  return status
-}
-
 const parseInterval = (value) => {
   const match = /^(\d+)(h|m)$/.exec(value || '')
   if (!match) return null
@@ -277,12 +210,6 @@ export const solar = async ({ db, logger, query }) => {
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting solar')
     result = { body: { error: error.message, success: false }, status: 500 }
-  }
-
-  try {
-    await checkSolarDeviceStatus({ db, logger })
-  } catch (error) {
-    logger.error({ error: error.message }, 'Error checking solar device status')
   }
 
   return Response.json(result.body, { status: result.status })
