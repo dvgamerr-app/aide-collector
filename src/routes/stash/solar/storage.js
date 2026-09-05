@@ -1,6 +1,6 @@
 import { sql } from 'kysely'
 
-const jsonb = (value) => sql`${JSON.stringify(value)}::jsonb`
+const jsonb = (value) => sql`${value}::jsonb`
 
 export const upsertSolarRecords = async (db, rows) => {
   for (let index = 0; index < rows.length; index += 1000) {

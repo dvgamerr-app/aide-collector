@@ -14,7 +14,7 @@ const upsertCinema = async (db, body) => {
       n_time: cinema.time,
       n_week: dayjs(cinema.release).week(),
       n_year: dayjs(cinema.release).year(),
-      o_theater: sql`${JSON.stringify(cinema.theater)}::jsonb`,
+      o_theater: sql`${cinema.theater}::jsonb`,
       s_bind: cinema.bind,
       s_cover: cinema.theater.sf?.cover || cinema.theater.major.cover,
       s_display: cinema.display,

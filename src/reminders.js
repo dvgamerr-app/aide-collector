@@ -8,7 +8,7 @@ export const getReminder = async (db, name) => {
 }
 
 export const setReminder = async (db, name, value) => {
-  const note = sql`${JSON.stringify(value)}::jsonb`
+  const note = sql`${value}::jsonb`
   await db
     .insertInto('reminder')
     .values({ name, note })
