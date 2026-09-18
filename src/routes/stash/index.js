@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia'
 
-import { cinema } from './cinema'
+import { cinema, cinemaIngest } from './cinema'
 import { gold } from './gold'
 import { lottery, lotteryBulk } from './lottery'
 import { mea } from './mea'
@@ -12,8 +12,19 @@ const route = new Elysia({ prefix: '/stash' })
 route.patch('/gold', gold, {
   detail: { description: 'Fetch current gold spot price and store it.', summary: 'Stash gold price', tags: ['Stash'] },
 })
-route.post('/cinema', cinema, {
-  detail: { description: 'Upsert cinema showing data and de-duplicate entries.', summary: 'Stash cinema showing', tags: ['Stash'] },
+route.patch('/cinema', cinema, {
+  detail: {
+    description: 'Scrape Major Cineplex (and SF when reachable) now-showing/coming-soon listings and upsert the current week bucket.',
+    summary: 'Stash cinema showing',
+    tags: ['Stash'],
+  },
+})
+route.post('/cinema', cinemaIngest, {
+  detail: {
+    description: 'Ingest an already-scraped cinema batch, merge theater sources and de-duplicate entries.',
+    summary: 'Ingest cinema showing',
+    tags: ['Stash'],
+  },
 })
 route.patch('/lottery', lottery, {
   detail: { description: 'Fetch latest lottery draw from Thairath and upsert.', summary: 'Stash lottery', tags: ['Stash'] },
