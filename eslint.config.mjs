@@ -7,7 +7,7 @@ export default [
   { ignores: ['build/**'] },
   {
     languageOptions: {
-      globals: { ...globals.browser, ...globals.node, Bun: false },
+      globals: { ...globals.browser, ...globals.node, Bun: false, HTMLRewriter: false },
     },
   },
   pluginJs.configs.recommended,

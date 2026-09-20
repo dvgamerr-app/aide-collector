@@ -48,18 +48,29 @@ bun run build           # bundle สำหรับ Bun ไปที่ build/in
 
 ใช้ `bun run lint:fix` และ `bun run format:fix` เมื่อต้องการแก้ lint/format อัตโนมัติ
 
+## ตั้งเวลา collector
+
+บรรทัด cron ของ collector อยู่ที่ [`docs/crontab`](docs/crontab) แก้ host ให้ตรงกับที่ deploy แล้วต่อท้าย `crontab -e`
+
+endpoint กลุ่ม `/stash` ไม่ต้องใช้ API key จึงเรียกจาก cron ได้ตรง ๆ
+
 ## Endpoints
 
 ### Read API
 
 - `GET /health` — health check
 - `GET /collector/cinema` — ข้อมูลหนัง; filter ได้ด้วย `genre`, `release_date`, `search`, `week`, `year`
+- `GET /collector/cinema/theater?search=` — รายชื่อสาขา Major พร้อมชื่อไทย/อังกฤษและโซน (ดึงสด ไม่เก็บลง DB)
+- `GET /collector/cinema/showtime?theater=&date=&movie=&time=&from=&to=&seats=` — รอบฉายสดของสาขา ต้องระบุช่วงเวลา (`time` หรือ `from`+`to`) และ `date` ได้แค่วันนี้/พรุ่งนี้ ใส่ `seats=true` เพื่อดูที่นั่งว่าง (ดึงทีละรอบ สูงสุด 10 รอบ)
+- `GET /collector/cinema/showtime/:showtime/seat?detail=` — ผังที่นั่งสดของรอบนั้น จำนวนว่าง/ถูกจอง และราคาตั๋ว
+- `GET /collector/cinema/:movie/:theater` — ทางลัดถามรอบฉายของหนังเรื่องหนึ่งที่สาขาหนึ่ง
 - `GET /collector/gold?currency=USD|THB` — ราคาทองและกำไร/ขาดทุนจาก reminder
 - `GET /lottery?limit=24` — ประวัติผลรางวัลล่าสุด
 
 ### Collector jobs
 
-- `POST /stash/cinema` — upsert และรวมข้อมูลโรงหนังที่ซ้ำกัน
+- `PATCH /stash/cinema` — scrape รายการหนัง now-showing/coming-soon จาก Major Cineplex (และ SF Cinema เมื่อเข้าถึงได้) แล้ว upsert ลง bucket ของสัปดาห์ปัจจุบัน
+- `POST /stash/cinema` — รับ batch ที่ scrape มาแล้ว รวมข้อมูลโรงหนัง และลบรายการซ้ำ
 - `PATCH /stash/gold` — ดึงราคาทองล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery` — ดึงผลรางวัลล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
@@ -93,8 +104,11 @@ src/
     ├── reminder.js          # gold reminder
     ├── token.js             # API-token lifecycle
     └── stash/               # external collectors และ bulk jobs
+        └── cinema/          # scrape/normalize/store ของ cinema collector
 ```
 
 ไฟล์ `CLAUDE.md` บันทึกแนวทางดูแลโค้ด การเปลี่ยนแปลงเชิง technical debt และคำสั่ง verification ล่าสุด
 
 รายละเอียดตาราง แหล่งข้อมูล และขอบเขตการ backfill ของ Solar อยู่ที่ [`docs/solar-schema.md`](docs/solar-schema.md)
+
+รายละเอียดของ cinema collector แหล่งข้อมูล และข้อจำกัดของ SF Cinema อยู่ที่ [`docs/cinema-collector.md`](docs/cinema-collector.md)

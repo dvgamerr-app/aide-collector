@@ -2,22 +2,40 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
-import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { Elysia, t } from 'elysia'
 import { sql } from 'kysely'
 
 import { parseJson } from '../json'
 import { getReminder, setReminder } from '../reminders'
+import { cinemaWeek, TIMEZONE } from './stash/cinema/normalize'
+import { movieAtTheater, showtimeList, showtimeSeats, theaterList } from './stash/cinema/routes'
+
+const showtimeQuery = t.Object({
+  date: t.Optional(t.String({ description: 'Show date YYYY-MM-DD; today or tomorrow only, defaults to today in Bangkok' })),
+  detail: t.Optional(t.String({ description: 'Set to true to include the per-row seat map' })),
+  from: t.Optional(
+    t.String({ description: 'Earliest start time HH:MM, required together with to unless time is given', examples: ['15:00'] }),
+  ),
+  movie: t.Optional(t.String({ description: 'Movie slug or part of its title', examples: ['the-odyssey'] })),
+  past: t.Optional(t.String({ description: 'Set to true to include screenings that already started' })),
+  seats: t.Optional(t.String({ description: 'Set to true to look up seat availability per showtime (max 10, fetched one at a time)' })),
+  theater: t.Optional(t.String({ description: 'Branch id, slug or part of its name', examples: ['paragon'] })),
+  time: t.Optional(t.String({ description: 'Exact start time HH:MM; use instead of from/to', examples: ['15:00'] })),
+  to: t.Optional(
+    t.String({ description: 'Latest start time HH:MM, required together with from unless time is given', examples: ['18:00'] }),
+  ),
+})
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
-dayjs.extend(weekOfYear)
 dayjs.extend(relativeTime)
 
 const cinema = async ({ db, query }) => {
   const { genre, release_date, search, week, year } = query
 
-  let q = db.selectFrom('stash.cinema_showing').select(['n_time', 'o_theater', 's_cover', 's_display', 's_genre', 's_url', 't_release'])
+  let q = db
+    .selectFrom('stash.cinema_showing')
+    .select(['n_time', 'o_theater', 's_cover', 's_display', 's_genre', 's_section', 's_url', 't_release'])
 
   let hasFilter = false
   if (search) {
@@ -27,7 +45,8 @@ const cinema = async ({ db, query }) => {
     if (!release_date.match(/^\d{4}-\d{2}-\d{2}$/) || !dayjs(release_date).isValid()) {
       throw { message: 'Invalid release_date', status: 400 }
     }
-    q = q.where('t_release', '=', release_date)
+    // t_release is stored as Bangkok midnight, so the day has to be compared in the same zone.
+    q = q.where(sql`(t_release AT TIME ZONE ${TIMEZONE})::date`, '=', release_date)
     hasFilter = true
   } else if (week || year) {
     if (week) q = q.where('n_week', '=', week)
@@ -38,15 +57,17 @@ const cinema = async ({ db, query }) => {
   if (genre) q = q.where('s_genre', 'ilike', `%${genre}%`)
 
   if (!hasFilter || (!search && genre)) {
-    q = q.where('n_week', '=', dayjs().week()).where('n_year', '=', dayjs().year())
+    // Must match the bucket the collector writes, otherwise the default listing is always empty.
+    const { week: currentWeek, year: currentYear } = cinemaWeek()
+    q = q.where('n_week', '=', currentWeek).where('n_year', '=', currentYear)
   }
 
-  const results = await q.orderBy('t_release desc').orderBy('s_display asc').execute()
+  const results = await q.orderBy('t_release', 'desc').orderBy('s_display', 'asc').execute()
 
   return results.map((row) => ({
     ...row,
-    o_theater: Object.keys(parseJson(row.o_theater)),
-    t_release: dayjs(row.t_release).tz('Asia/Bangkok').format('YYYY-MM-DD'),
+    o_theater: Object.keys(parseJson(row.o_theater) || {}),
+    t_release: row.t_release ? dayjs(row.t_release).tz('Asia/Bangkok').format('YYYY-MM-DD') : null,
   }))
 }
 
@@ -117,6 +138,49 @@ route.get('/cinema', cinema, {
     week: t.Optional(t.Number()),
     year: t.Optional(t.Number()),
   }),
+})
+
+route.get('/cinema/theater', theaterList, {
+  detail: {
+    description: 'List every Major Cineplex branch with its Thai/English name and zone. Fetched live, never stored.',
+    summary: 'Get cinema theaters',
+    tags: ['Collector'],
+  },
+  query: t.Object({ search: t.Optional(t.String({ description: 'Match against branch name or zone', examples: ['paragon'] })) }),
+})
+
+route.get('/cinema/showtime', showtimeList, {
+  detail: {
+    description:
+      'Live showtimes for one branch inside a required time window, optionally with per-showtime seat availability. Answers "which screen and how many seats are free at 15:00".',
+    summary: 'Get cinema showtimes',
+    tags: ['Collector'],
+  },
+  query: showtimeQuery,
+})
+
+route.get('/cinema/showtime/:showtime/seat', showtimeSeats, {
+  detail: {
+    description: 'Live seat plan for one showtime: free/occupied counts, ticket prices and, with detail=true, the per-row seat map.',
+    summary: 'Get cinema seats',
+    tags: ['Collector'],
+  },
+  params: t.Object({ showtime: t.String({ description: 'Showtime id from /collector/cinema/showtime', examples: ['6306778'] }) }),
+  query: t.Object({ detail: t.Optional(t.String({ description: 'Set to true to include the per-row seat map' })) }),
+})
+
+route.get('/cinema/:movie/:theater', movieAtTheater, {
+  detail: {
+    description:
+      'Shorthand for the showtimes of one movie at one branch, with the same required time window as /collector/cinema/showtime.',
+    summary: 'Get cinema showtimes by movie and theater',
+    tags: ['Collector'],
+  },
+  params: t.Object({
+    movie: t.String({ description: 'Movie slug or part of its title', examples: ['the-odyssey'] }),
+    theater: t.String({ description: 'Branch id, slug or part of its name', examples: ['paragon'] }),
+  }),
+  query: showtimeQuery,
 })
 
 route.get('/gold', gold, {
