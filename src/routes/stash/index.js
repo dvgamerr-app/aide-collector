@@ -5,9 +5,18 @@ import { gold } from './gold'
 import { lottery, lotteryBulk } from './lottery'
 import { mea } from './mea'
 import { mwa } from './mwa'
+import { collectOnt } from './ont'
 import { solar, solarBulk } from './solar'
 
 const route = new Elysia({ prefix: '/stash' })
+
+route.patch('/ont', collectOnt, {
+  detail: {
+    description: 'Collect one ONT host snapshot and optional AdGuard DNS counts. Call from cron; concurrent runs return 409.',
+    summary: 'Stash ONT devices',
+    tags: ['Stash'],
+  },
+})
 
 route.patch('/gold', gold, {
   detail: { description: 'Fetch current gold spot price and store it.', summary: 'Stash gold price', tags: ['Stash'] },

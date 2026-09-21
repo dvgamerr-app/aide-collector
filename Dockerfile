@@ -4,6 +4,9 @@ LABEL org.opencontainers.image.source="https://github.com/dvgamerr-app/aide-coll
 
 WORKDIR /app
 
+RUN apk add --no-cache chromium
+ENV CHROME_PATH=/usr/bin/chromium
+
 COPY package.json bun.lock ./
 COPY ./src/ ./src/
 

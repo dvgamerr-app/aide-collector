@@ -6,9 +6,10 @@
 - Database: PostgreSQL through Kysely/Postgres.js.
 - Entry point: `src/index.js`.
 - Schema changes: Kysely migration modules in `src/migrations`; startup does not run them automatically.
-- External collectors: `src/routes/stash` (gold, lottery, MEA, MWA, solar and cinema).
+- External collectors: `src/routes/stash` (gold, lottery, MEA, MWA, solar, cinema and ONT).
 - Cinema scraping lives in `src/routes/stash/cinema`; it uses `fetch` + `HTMLRewriter`, never a headless browser. See `docs/cinema-collector.md`.
 - JSON/JSONB normalization: `parseJson` in `src/json.js` (Postgres.js may return JSONB strings).
+- ONT uses a reused Playwright/Chrome session only when `PATCH /stash/ont` is called; cron owns scheduling. Run one ONT collector replica. Schema, curl and configuration: `docs/ont-collector.md`.
 - Shared JSON reminder persistence: `src/reminders.js`; use `getReminder`/`setReminder` instead of repeating JSONB upsert queries.
 - Request metadata is request-local and comes from `requestContext` in `src/middleware.js`; do not store trace IDs or start times in Elysia's shared application `store`.
 

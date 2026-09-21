@@ -11,3 +11,4 @@ LOG=/var/log/aide-collector.log
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mea" 2>&1); rc=$?; echo "$(date -Iseconds) [mea] $out" >> $LOG; exit $rc
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mwa" 2>&1); rc=$?; echo "$(date -Iseconds) [mwa] $out" >> $LOG; exit $rc
 */5 * * * * out=$(curl -fsS --max-time 180 -X PATCH "$API/stash/solar?interval=1h" 2>&1); rc=$?; echo "$(date -Iseconds) [solar] $out" >> $LOG; exit $rc
+* * * * * curl -fsS --max-time 120 -X PATCH "$API/stash/ont" 2>&1; rc=$?; exit $rc
