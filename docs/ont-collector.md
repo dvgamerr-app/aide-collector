@@ -11,6 +11,8 @@
 
 Windows ใช้ Google Chrome ที่ติดตั้งอยู่; Linux ใช้ Chromium ที่ `/usr/bin/chromium` หรือกำหนด `CHROME_PATH` เอง Dockerfile ติดตั้ง Chromium ให้แล้ว หลังอัปเดตต้อง build image ใหม่
 
+GitHub Actions deploy ต้องตั้ง repository secrets `ONT_PASS` และ `AG_PASS` เพิ่มจาก secrets ของ collector เดิม (`AG_PASS` เว้นว่างได้หากไม่ใช้ AdGuard) ค่า `.env` บนเครื่องพัฒนาไม่ได้ถูกส่งเข้า container โดยอัตโนมัติ Workflow ส่งค่าผ่าน environment และตรวจ `ONT_PASS` ก่อนหยุด container เดิม ปรับค่า ONT/AdGuard อื่นผ่าน repository variables ชื่อตรงกับตาราง Environment ด้านล่าง ยกเว้น `CHROME_PATH` ซึ่งใช้ค่าจาก image
+
 `bun run build` เก็บ `playwright-core` เป็น external dependency เพราะ package มีไฟล์ runtime ของตัวเอง การรัน `build/index.js` ต้องมี production `node_modules` ด้วย
 
 เครื่องที่รัน API ต้องเข้าถึง ONT และ AdGuard ผ่าน LAN ได้ รัน API ที่เก็บ ONT นี้เพียงหนึ่ง replica และหยุด collector เดิม เพราะ firmware อนุญาตเพียงหนึ่ง login session การล็อกใน PostgreSQL ป้องกันงานซ้อน แต่ไม่ได้แบ่ง browser session ระหว่าง replica
