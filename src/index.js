@@ -10,6 +10,7 @@ import health from './routes/health'
 import lottery from './routes/lottery'
 import reminder from './routes/reminder'
 import stash from './routes/stash'
+import { closeOnt } from './routes/stash/ont'
 import token from './routes/token'
 
 logger.info(`aide-collector ${version} starting...`)
@@ -29,7 +30,10 @@ const app = new Elysia()
   .use(lottery)
   .use(token)
 
-setupGracefulShutdown(destroy)
+setupGracefulShutdown(async () => {
+  await closeOnt()
+  await destroy()
+})
 
 app.listen({ hostname: '0.0.0.0', port: PORT })
 logger.info(`running on ${app.server?.hostname}:${app.server?.port}`)

@@ -9,6 +9,7 @@ import { parseJson } from '../json'
 import { getReminder, setReminder } from '../reminders'
 import { cinemaWeek, TIMEZONE } from './stash/cinema/normalize'
 import { movieAtTheater, showtimeList, showtimeSeats, theaterList } from './stash/cinema/routes'
+import { ontHistory, ontLatest } from './stash/ont/routes'
 
 const showtimeQuery = t.Object({
   date: t.Optional(t.String({ description: 'Show date YYYY-MM-DD; today or tomorrow only, defaults to today in Bangkok' })),
@@ -124,6 +125,24 @@ const gold = async ({ db, logger, query, traceId }) => {
 }
 
 const route = new Elysia({ prefix: '/collector' })
+
+route.get('/ont', ontLatest, {
+  detail: { description: 'Read the latest complete ONT snapshot from PostgreSQL.', summary: 'Get ONT devices', tags: ['Collector'] },
+})
+
+route.get('/ont/:mac/history', ontHistory, {
+  detail: {
+    description: 'Read device samples (last 24 hours by default, maximum 31 days).',
+    summary: 'Get ONT device history',
+    tags: ['Collector'],
+  },
+  params: t.Object({ mac: t.String({ pattern: '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$' }) }),
+  query: t.Object({
+    from: t.Optional(t.String({ format: 'date-time' })),
+    limit: t.Optional(t.Numeric({ maximum: 5000, minimum: 1, multipleOf: 1 })),
+    to: t.Optional(t.String({ format: 'date-time' })),
+  }),
+})
 
 route.get('/cinema', cinema, {
   detail: {

@@ -1,6 +1,6 @@
 # Aide Collector
 
-REST API สำหรับรวบรวมและอ่านข้อมูล cinema, gold, lottery, MEA, MWA, solar และ reminder พร้อม endpoint สำหรับจัดการ API token สร้างด้วย Bun, Elysia, Kysely และ PostgreSQL
+REST API สำหรับรวบรวมและอ่านข้อมูล cinema, gold, lottery, MEA, MWA, solar, ONT และ reminder พร้อม endpoint สำหรับจัดการ API token สร้างด้วย Bun, Elysia, Kysely และ PostgreSQL
 
 ## เริ่มต้นใช้งาน
 
@@ -65,6 +65,8 @@ endpoint กลุ่ม `/stash` ไม่ต้องใช้ API key จึ�
 - `GET /collector/cinema/showtime/:showtime/seat?detail=` — ผังที่นั่งสดของรอบนั้น จำนวนว่าง/ถูกจอง และราคาตั๋ว
 - `GET /collector/cinema/:movie/:theater` — ทางลัดถามรอบฉายของหนังเรื่องหนึ่งที่สาขาหนึ่ง
 - `GET /collector/gold?currency=USD|THB` — ราคาทองและกำไร/ขาดทุนจาก reminder
+- `GET /collector/ont` — snapshot อุปกรณ์ ONT ล่าสุดจาก PostgreSQL
+- `GET /collector/ont/:mac/history?from=&to=&limit=` — ประวัติสถานะต่อเครื่อง ย้อนหลัง 24 ชั่วโมงโดยค่าเริ่มต้น
 - `GET /lottery?limit=24` — ประวัติผลรางวัลล่าสุด
 
 ### Collector jobs
@@ -72,6 +74,7 @@ endpoint กลุ่ม `/stash` ไม่ต้องใช้ API key จึ�
 - `PATCH /stash/cinema` — scrape รายการหนัง now-showing/coming-soon จาก Major Cineplex (และ SF Cinema เมื่อเข้าถึงได้) แล้ว upsert ลง bucket ของสัปดาห์ปัจจุบัน
 - `POST /stash/cinema` — รับ batch ที่ scrape มาแล้ว รวมข้อมูลโรงหนัง และลบรายการซ้ำ
 - `PATCH /stash/gold` — ดึงราคาทองล่าสุดแล้วบันทึก
+- `PATCH /stash/ont` — ใช้ Chrome อ่าน ONT หนึ่งรอบ รวม AdGuard แล้วบันทึก; เรียกผ่าน curl จาก cron
 - `PATCH /stash/lottery` — ดึงผลรางวัลล่าสุดแล้วบันทึก
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
 - `PATCH /stash/mea` — ดึงมิเตอร์ ประวัติค่าไฟ และประวัติการชำระย้อนหลังแยกรายเดือน โดยจับคู่ `billNo` แบบคงเลขศูนย์นำหน้า
@@ -112,3 +115,5 @@ src/
 รายละเอียดตาราง แหล่งข้อมูล และขอบเขตการ backfill ของ Solar อยู่ที่ [`docs/solar-schema.md`](docs/solar-schema.md)
 
 รายละเอียดของ cinema collector แหล่งข้อมูล และข้อจำกัดของ SF Cinema อยู่ที่ [`docs/cinema-collector.md`](docs/cinema-collector.md)
+
+รายละเอียด ONT collector, migration `010_ont`, Chromium, environment และตัวอย่าง curl อยู่ที่ [`docs/ont-collector.md`](docs/ont-collector.md)
