@@ -110,26 +110,35 @@ export const parseMajorDocument = async (html) => {
 
 export const toMajorEntries = (englishMovies, thaiMovies) => {
   const thaiByPath = new Map((thaiMovies || []).map((movie) => [movie.path, movie]))
+  // Major sometimes lists the same title under both the now-showing and coming-soon panels at once;
+  // collapse those into one entry here instead of relying on the cross-provider merge to catch it.
+  const byBind = new Map()
 
-  return (englishMovies || [])
-    .map((movie) => {
-      const bind = slugify(movie.path.replace(/^\/movie\//, '')) || slugify(movie.display)
-      if (!bind) return null
+  for (const movie of englishMovies || []) {
+    const bind = slugify(movie.path.replace(/^\/movie\//, '')) || slugify(movie.display)
+    if (!bind) continue
 
-      const thai = thaiByPath.get(movie.path)
-      return {
-        bind,
-        display: movie.display,
-        genre: movie.genre || movie.badgeGenre || thai?.genre || '',
-        minutes: parseMinutes(movie.timeText || thai?.timeText),
-        nameEn: movie.display,
-        nameTh: thai?.display || movie.display,
-        release: parseRelease(movie.release || thai?.release),
-        section: movie.section,
-        theater: { major: { cover: movie.cover || thai?.cover || '', url: `${MAJOR_ORIGIN}${movie.path}` } },
-      }
+    const existing = byBind.get(bind)
+    if (existing) {
+      if (movie.section === 'showing') existing.section = 'showing'
+      continue
+    }
+
+    const thai = thaiByPath.get(movie.path)
+    byBind.set(bind, {
+      bind,
+      display: movie.display,
+      genre: movie.genre || movie.badgeGenre || thai?.genre || '',
+      minutes: parseMinutes(movie.timeText || thai?.timeText),
+      nameEn: movie.display,
+      nameTh: thai?.display || movie.display,
+      release: parseRelease(movie.release || thai?.release),
+      section: movie.section,
+      theater: { major: { cover: movie.cover || thai?.cover || '', url: `${MAJOR_ORIGIN}${movie.path}` } },
     })
-    .filter(Boolean)
+  }
+
+  return [...byBind.values()]
 }
 
 /** Language is stored per session, so each language needs its own cookie jar to be fetched concurrently. */

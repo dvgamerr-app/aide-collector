@@ -6,6 +6,7 @@ API=http://10.203.1.91:3001
 LOG=/var/log/aide-collector.log
 
 0 4 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/cinema" 2>&1); rc=$?; echo "$(date -Iseconds) [cinema] $out" >> $LOG; exit $rc
+0 6 * * 1,4 out=$(curl -fsS --max-time 60 -X POST "$API/notify/cinema" 2>&1); rc=$?; echo "$(date -Iseconds) [notify-cinema] $out" >> $LOG; exit $rc
 0 */5 * * * out=$(curl -fsS --max-time 30 -X PATCH "$API/stash/gold" 2>&1); rc=$?; echo "$(date -Iseconds) [gold] $out" >> $LOG; exit $rc
 0 18,21 1,16 * * out=$(curl -fsS --max-time 60 -X PATCH "$API/stash/lottery" 2>&1); rc=$?; echo "$(date -Iseconds) [lottery] $out" >> $LOG; exit $rc
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mea" 2>&1); rc=$?; echo "$(date -Iseconds) [mea] $out" >> $LOG; exit $rc

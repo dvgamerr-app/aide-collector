@@ -110,6 +110,8 @@ jobs:
           AG_BASE: ${{ vars.AG_BASE || 'http://10.203.1.91:8080' }}
           AG_USER: ${{ vars.AG_USER || 'dvgamerr' }}
           AG_CLIENT_INTERVAL: ${{ vars.AG_CLIENT_INTERVAL || '900' }}
+          NOTIFY_API_KEY: ${{ secrets.NOTIFY_API_KEY }}
+          NOTIFY_CINEMA_CHAT: ${{ secrets.NOTIFY_CINEMA_CHAT }}
         run: |
           container rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
           container run -d \
@@ -126,6 +128,7 @@ jobs:
             -e ONT_ID -e ONT_BASE -e ONT_USER \
             -e ONT_MIN_INTERVAL -e ONT_REQUEST_TIMEOUT \
             -e AG_BASE -e AG_USER -e AG_CLIENT_INTERVAL \
+            -e NOTIFY_API_KEY -e NOTIFY_CINEMA_CHAT \
             -p 3001:3000 \
             ${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}
 

@@ -11,6 +11,7 @@
 - JSON/JSONB normalization: `parseJson` in `src/json.js` (Postgres.js may return JSONB strings).
 - ONT uses a reused Playwright/Chrome session only when `PATCH /stash/ont` is called; cron owns scheduling. Run one ONT collector replica. Schema, curl and configuration: `docs/ont-collector.md`.
 - Shared JSON reminder persistence: `src/reminders.js`; use `getReminder`/`setReminder` instead of repeating JSONB upsert queries.
+- Outbound LINE notifications: `src/notify.js` (`sendNotify`) pushes through the external notice-manager API (`https://notice.dvgamerr.app`); never call LINE's Messaging API directly from this service. First consumer: `POST /notify/cinema` (`src/routes/notify`). See `docs/notify.md`.
 - Request metadata is request-local and comes from `requestContext` in `src/middleware.js`; do not store trace IDs or start times in Elysia's shared application `store`.
 
 ## Development commands

@@ -8,6 +8,7 @@ import { errorHandler, requestContext, responseLogger, swaggerConfig } from './m
 import collector from './routes/collector'
 import health from './routes/health'
 import lottery from './routes/lottery'
+import notify from './routes/notify'
 import reminder from './routes/reminder'
 import stash from './routes/stash'
 import { closeOnt } from './routes/stash/ont'
@@ -28,6 +29,7 @@ const app = new Elysia()
   .use(stash)
   .use(reminder)
   .use(lottery)
+  .use(notify)
   .use(token)
 
 setupGracefulShutdown(async () => {
