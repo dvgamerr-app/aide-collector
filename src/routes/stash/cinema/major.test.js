@@ -97,4 +97,23 @@ describe('Major Cineplex listing parser', () => {
     })
     expect(entries[0].release).toEqual(new Date('2026-09-02T17:00:00.000Z'))
   })
+
+  it('collapses a title listed under both the showing and coming panels into one entry', async () => {
+    const dual = () => `
+      <html><body>
+        <div id="movie-page-showing" role="tabpanel"><div class="box-movies-list">
+          ${card({ badge: 'Musical', cover: 'https://cdn/bts.jpg', display: 'BTS LIVE VIEWING', duration: '03 HR. 15 MINS', genres: 'Musical', path: '/movie/bts-live-viewing', release: '24 Oct 2026' })}
+        </div></div>
+        <div id="movie-page-coming" role="tabpanel"><div class="box-movies-list">
+          ${card({ badge: 'Musical', cover: 'https://cdn/bts.jpg', display: 'BTS LIVE VIEWING', duration: '03 HR. 15 MINS', genres: 'Musical', path: '/movie/bts-live-viewing', release: '24 Oct 2026' })}
+        </div></div>
+      </body></html>`
+
+    const movies = await parseMajorDocument(dual())
+    expect(movies).toHaveLength(2)
+
+    const entries = toMajorEntries(movies, [])
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ bind: 'bts-live-viewing', section: 'showing' })
+  })
 })
