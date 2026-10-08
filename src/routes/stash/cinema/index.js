@@ -35,7 +35,7 @@ export const cinema = async ({ db, logger }) => {
 
     const failed = results.filter((result) => !result.ok)
     for (const result of failed) {
-      logger[result.blocked ? 'warn' : 'error']({ error: result.error, source: result.source }, 'cinema source unavailable')
+      logger.error({ blocked: result.blocked, error: result.error, source: result.source }, 'cinema source unavailable')
     }
 
     if (!entries.length) {
@@ -49,7 +49,7 @@ export const cinema = async ({ db, logger }) => {
     )
 
     logger.info({ removed, rows, sources, stored }, 'cinema collected')
-    return Response.json({ merged: rows, removed, sources, stored, success: true })
+    return Response.json({ degraded: failed.length > 0, merged: rows, removed, sources, stored, success: true })
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting cinema')
     return Response.json({ error: error.message, success: false }, { status: 500 })

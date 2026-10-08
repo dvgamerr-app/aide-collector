@@ -3,7 +3,7 @@ PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 MAILTO=""
 
 API=http://10.203.1.91:3001
-LOG=/var/log/aide-collector.log
+LOG=$HOME/Library/Logs/aide-collector.log
 
 0 4 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/cinema" 2>&1); rc=$?; echo "$(date -Iseconds) [cinema] $out" >> $LOG; exit $rc
 0 6 * * 1,4 out=$(curl -fsS --max-time 60 -X POST "$API/notify/cinema" 2>&1); rc=$?; echo "$(date -Iseconds) [notify-cinema] $out" >> $LOG; exit $rc
@@ -12,4 +12,5 @@ LOG=/var/log/aide-collector.log
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mea" 2>&1); rc=$?; echo "$(date -Iseconds) [mea] $out" >> $LOG; exit $rc
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mwa" 2>&1); rc=$?; echo "$(date -Iseconds) [mwa] $out" >> $LOG; exit $rc
 */5 * * * * out=$(curl -fsS --max-time 180 -X PATCH "$API/stash/solar?interval=1h" 2>&1); rc=$?; echo "$(date -Iseconds) [solar] $out" >> $LOG; exit $rc
-* * * * * curl -fsS --max-time 120 -X PATCH "$API/stash/ont" 2>&1; rc=$?; exit $rc
+* * * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/ont" 2>&1); rc=$?; echo "$(date -Iseconds) [ont] $out" >> "$LOG"; exit $rc
+* * * * * PATH=/opt/homebrew/bin:$PATH; container ls -a 2>/dev/null | grep -q "aide-collector.*stopped" && { container start aide-collector >/dev/null 2>&1; echo "$(date -Iseconds) [watchdog] restarted aide-collector" >> "$LOG"; }

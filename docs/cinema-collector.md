@@ -36,7 +36,7 @@
 
 collector จึงตรวจจับ challenge แล้วรายงานเป็น source ที่ใช้ไม่ได้ (log ระดับ `warn`) โดย **ไม่ทำให้ทั้ง job ล้ม** ข้อมูลของ Major ยังถูกบันทึกตามปกติ
 
-parser ของ SF ยังคงอยู่ในโค้ดและจะกลับมาทำงานทันทีที่เข้าถึงไซต์ได้อีกครั้ง (เช่น ผ่าน egress ที่ไม่โดน challenge)
+**parser ใน `sf.js` ใช้งานไม่ได้แม้ผ่าน challenge:** เว็บใหม่ไม่มี `/movies/now-showing` (404) และไม่มี `.movie-card` รายการหนังโหลดจาก JSON API `onl.sfcinema.com/ticket/data/content?locale=en&type=all&is_short=false&channel=WEB` ซึ่งอยู่หลัง Cloudflare เช่นกัน (curl ได้ 403) ต้องเขียน provider ใหม่ถ้า SF เปิดทางเข้าถึงได้ ระหว่างนี้ผล `PATCH` จะมี `"degraded": true` และ log ระดับ `error` ทุกรอบ
 
 ## Week bucket
 
@@ -57,7 +57,7 @@ parser ของ SF ยังคงอยู่ในโค้ดและจะ
 
 ```bash
 curl -X PATCH http://localhost:3000/stash/cinema
-# { "success": true, "merged": 160, "removed": 0, "stored": 160, "sources": { "major": { "movies": 189, "ok": true }, "sf": { "error": "sf listing blocked: HTTP 403", "ok": false } } }
+# { "success": true, "merged": 160, "removed": 0, "stored": 160, "degraded": true, "sources": { "major": { "movies": 189, "ok": true }, "sf": { "error": "sf listing blocked: HTTP 403", "ok": false } } }
 
 curl -X POST http://localhost:3000/stash/cinema -H 'content-type: application/json' -d '[...]'
 ```
