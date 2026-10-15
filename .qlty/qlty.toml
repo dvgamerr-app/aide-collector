@@ -99,5 +99,5 @@ name = "osv-scanner"
 # Baseline: existing production deploy workflow. Hardening is tracked in a
 # separate change so this PR does not alter deploy behaviour.
 [[exclude]]
-plugins = ["zizmor"]
+plugins = ["zizmor", "actionlint"]
 file_patterns = [".github/workflows/build-ghcr.yml"]
