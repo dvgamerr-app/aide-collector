@@ -1,6 +1,8 @@
+import { trace } from '@opentelemetry/api'
 import { randomUUID } from 'crypto'
 
 import { version } from './config'
+import { withoutOtelLog } from './otel-logs'
 
 export const requestContext = ({ headers, set }) => {
   const traceId = headers['x-trace-id'] || headers['trace-id'] || randomUUID()
@@ -8,8 +10,13 @@ export const requestContext = ({ headers, set }) => {
   return { requestStartedAt: performance.now(), traceId }
 }
 
-export const errorHandler = ({ code, error, path, traceId }, logger) => {
-  if (code === 'NOT_FOUND') return new Response(code, { status: 404 })
+export const errorHandler = ({ code, error, path, set, traceId }, logger) => {
+  if (code === 'NOT_FOUND') {
+    // Traceway folds a 404 with a catch-all route into one UNMATCHED endpoint instead of one row per URL.
+    trace.getActiveSpan()?.setAttributes({ 'http.response.status_code': 404, 'http.route': '/*' })
+    if (set) set.status = 404
+    return new Response(code, { status: 404 })
+  }
 
   logger.error({ code, error: error.message, path, stack: error.stack, traceId })
 
@@ -28,7 +35,10 @@ export const responseLogger = ({ code, path, request, requestStartedAt, response
   const errorMsg = isError ? ` |${status?.code || status?.message?.replace('Error: ', '') || 'Error'}| ` : ' '
   const duration = elapsedMilliseconds(requestStartedAt)
 
-  logger[isError ? 'warn' : 'info'](`[${traceId}] [${code || response?.status || request.method}] ${path}${errorMsg}${duration}ms`)
+  // The endpoint span already records method, path, status and duration, so keep this line console-only.
+  withoutOtelLog(() =>
+    logger[isError ? 'warn' : 'info'](`[${traceId}] [${code || response?.status || request.method}] ${path}${errorMsg}${duration}ms`),
+  )
 }
 
 export const swaggerConfig = {
