@@ -136,7 +136,7 @@ export class OntSession {
     )
   }
 
-  async read() {
+  async read(logger) {
     try {
       if (!this.page) await this.open()
       const result = await bounded(
@@ -164,14 +164,22 @@ export class OntSession {
         ),
         timeout(),
       )
-      if (
-        !Array.isArray(result?.data) ||
-        result.data.some(
-          (host) => !host || !/^([\da-f]{2}:){5}[\da-f]{2}$/i.test(host.MACAddress) || !['0', 0, '1', 1].includes(host.Active),
-        )
-      )
-        throw new Error('Invalid ONT host response; no snapshot saved')
-      return [...new Map(result.data.map((host) => [host.MACAddress.toUpperCase(), host])).values()]
+      if (!Array.isArray(result?.data))
+        throw new Error(`Invalid ONT host response: data is ${result?.data === null ? 'null' : typeof result?.data}`)
+      const valid = []
+      const rejected = []
+      result.data.forEach((host, index) => {
+        if (!host || typeof host !== 'object') return rejected.push({ index, reason: 'not an object' })
+        if (typeof host.MACAddress !== 'string' || !/^([\da-f]{2}:){5}[\da-f]{2}$/i.test(host.MACAddress))
+          return rejected.push({ index, mac_length: String(host.MACAddress ?? '').length, reason: 'bad MACAddress' })
+        if (!['0', 0, '1', 1].includes(host.Active)) return rejected.push({ active: host.Active, index, reason: 'bad Active' })
+        valid.push(host)
+      })
+      // Drop malformed rows instead of discarding the whole snapshot; fail only when nothing usable remains.
+      if (rejected.length)
+        logger?.warn({ rejected: rejected.slice(0, 5), rejected_count: rejected.length, total: result.data.length }, 'ONT hosts skipped')
+      if (!valid.length && result.data.length) throw new Error(`Invalid ONT host response: all ${result.data.length} hosts rejected`)
+      return [...new Map(valid.map((host) => [host.MACAddress.toUpperCase(), host])).values()]
     } catch (error) {
       await this.close()
       throw error

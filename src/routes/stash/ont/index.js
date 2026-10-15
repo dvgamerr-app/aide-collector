@@ -52,7 +52,7 @@ export const collectOnt = async ({ db, logger }) => {
       const before = ont.requests
       let hosts
       try {
-        hosts = await ont.read()
+        hosts = await ont.read(logger)
       } catch (error) {
         retryAt = Date.now() + Math.min(900000, interval * 2 ** Math.min(++failures, 10))
         logger.warn({ error: error.message }, 'ONT upstream unavailable')
