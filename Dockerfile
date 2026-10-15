@@ -4,6 +4,7 @@ LABEL org.opencontainers.image.source="https://github.com/dvgamerr-app/aide-coll
 
 WORKDIR /app
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache chromium
 ENV CHROME_PATH=/usr/bin/chromium
 
