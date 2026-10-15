@@ -15,7 +15,8 @@
     "prepare": "bunx --bun husky",
     "proxy": "cloudflared tunnel run dev",
     "start": "bun run ./src/index.js",
-    "test": "bun test"
+    "test": "bun test",
+    "test:ci": "bun test"
   },
   "lint-staged": {
     "*": "prettier --check . --write",
