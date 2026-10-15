@@ -51,8 +51,13 @@ const parseArgs = ([first, second]) => {
 // Emits within the active context so a line logged during a request carries that request's trace id.
 export const emitLog = (level, args) => {
   if (!otelLogger || localOnly) return
-  const { attributes, body } = parseArgs(args)
-  otelLogger.emit({ attributes, body, severityNumber: SEVERITY[level], severityText: level.toUpperCase() })
+  // Telemetry must never break the log call it rides on (e.g. JSON.stringify on a circular field).
+  try {
+    const { attributes, body } = parseArgs(args)
+    otelLogger.emit({ attributes, body, severityNumber: SEVERITY[level], severityText: level.toUpperCase() })
+  } catch {
+    // dropped on purpose: the console line is still written by pino
+  }
 }
 
 // Runs a synchronous log call that should reach the console only, e.g. lines the endpoint span already covers.

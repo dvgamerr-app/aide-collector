@@ -44,7 +44,7 @@ const cinema = async ({ db, query }) => {
     hasFilter = true
   } else if (release_date) {
     if (!release_date.match(/^\d{4}-\d{2}-\d{2}$/) || !dayjs(release_date).isValid()) {
-      throw { message: 'Invalid release_date', status: 400 }
+      throw Object.assign(new Error('Invalid release_date'), { status: 400 })
     }
     // t_release is stored as Bangkok midnight, so the day has to be compared in the same zone.
     q = q.where(sql`(t_release AT TIME ZONE ${TIMEZONE})::date`, '=', release_date)

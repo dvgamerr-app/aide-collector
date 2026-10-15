@@ -89,11 +89,19 @@ const collectShowtimes = async (theaterReference, query, logger) => {
     showtimes = await attachSeats(truncated ? filtered.slice(0, SEAT_LIMIT) : filtered, options.detail)
   }
 
+  const attempted = options.seats ? showtimes.filter((entry) => !entry.past && entry.showtime) : []
+  const failed = attempted.filter((entry) => entry.seatsError)
+  if (failed.length && failed.length === attempted.length) {
+    logger.error({ error: failed[0].seatsError, failed: failed.length, theater: theater.id }, 'cinema seat lookups all failed')
+    return fail(`seat lookup failed for every showtime: ${failed[0].seatsError}`, 502)
+  }
+
   const available = options.seats ? showtimes.reduce((total, entry) => total + (entry.seats?.available ?? 0), 0) : null
   logger.info({ date: options.date, matched: filtered.length, seats: options.seats, theater: theater.id }, 'cinema showtimes served')
 
   return Response.json({
     ...(available !== null && { seatsAvailable: available }),
+    ...(failed.length && { seatsFailed: failed.length }),
     ...(truncated && { seatsTruncated: SEAT_LIMIT }),
     date: options.date,
     showtimes,
