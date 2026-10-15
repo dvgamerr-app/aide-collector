@@ -113,7 +113,7 @@ jobs:
           NOTIFY_API_KEY: ${{ secrets.NOTIFY_API_KEY }}
           NOTIFY_CINEMA_CHAT: ${{ secrets.NOTIFY_CINEMA_CHAT }}
           TRACEWAY_URL: ${{ vars.TRACEWAY_URL || 'http://traceway.local' }}
-          TRACEWAY_BACKEND_TOKEN: ${{ secrets.TRACEWAY_BACKEND_TOKEN }}
+          TRACEWAY_TOKEN: ${{ secrets.TRACEWAY_TOKEN }}
         run: |
           container rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
           container run -d \
@@ -131,7 +131,7 @@ jobs:
             -e ONT_MIN_INTERVAL -e ONT_REQUEST_TIMEOUT \
             -e AG_BASE -e AG_USER -e AG_CLIENT_INTERVAL \
             -e NOTIFY_API_KEY -e NOTIFY_CINEMA_CHAT \
-            -e TRACEWAY_URL -e TRACEWAY_BACKEND_TOKEN \
+            -e TRACEWAY_TOKEN -e TRACEWAY_URL \
             -p 3001:3000 \
             ${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}
 

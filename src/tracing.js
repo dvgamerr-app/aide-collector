@@ -11,7 +11,7 @@ const IGNORED_PATHS = ['/health', '/docs']
 // Traceway ingests OTLP/HTTP at <instance>/api/otel; tracing stays off until a token is configured.
 export const tracing = () => {
   const instance = Bun.env.TRACEWAY_URL?.replace(/\/+$/, '')
-  const token = Bun.env.TRACEWAY_BACKEND_TOKEN
+  const token = Bun.env.TRACEWAY_TOKEN
   if (!instance || !token) return null
 
   return opentelemetry({
