@@ -1,5 +1,7 @@
 import dayjs from 'dayjs'
 
+import { alreadyRunning, startExclusive } from '../../background-job'
+
 const LOTTERY_API = 'https://api.thairath.co.th/tr-api/phalcon/api-lottery/history'
 const FETCH_HEADERS = {
   accept: '*/*',
@@ -101,6 +103,10 @@ export const lotteryBulk = async ({ db, logger, query }) => {
   }
 
   // ponytail: return 202 immediately — bulk takes 100+ seconds, can't block the request
-  void runBulk(db, logger, targetDate)
-  return new Response(null, { status: 202 })
+  const started = startExclusive(
+    'lottery bulk',
+    () => runBulk(db, logger, targetDate),
+    (error) => logger.error({ error: error.message }, 'bulk lottery crashed'),
+  )
+  return started ? new Response(null, { status: 202 }) : alreadyRunning('lottery bulk')
 }
