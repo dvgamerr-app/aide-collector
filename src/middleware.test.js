@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { Elysia } from 'elysia'
+import { Elysia, t } from 'elysia'
 
-import { elapsedMilliseconds, requestContext } from './middleware'
+import { elapsedMilliseconds, errorHandler, errorStatus, requestContext } from './middleware'
 
 describe('requestContext', () => {
   it('keeps a caller trace ID in request-local context and the response header', () => {
@@ -33,6 +33,49 @@ describe('requestContext', () => {
 
     expect(await first.text()).toBe('first')
     expect(await second.text()).toBe('second')
+  })
+})
+
+describe('errorHandler', () => {
+  const logger = { error: () => {} }
+  const build = () =>
+    new Elysia()
+      .onError((context) => errorHandler(context, logger))
+      .get('/boom', () => {
+        throw new Error('db down')
+      })
+      .get('/bad', () => {
+        throw Object.assign(new Error('Invalid release_date'), { status: 400 })
+      })
+      .get('/num', ({ query }) => query.n, { query: t.Object({ n: t.Numeric() }) })
+
+  it('answers an unhandled error with HTTP 500 and a failure body', async () => {
+    const res = await build().handle(new Request('http://localhost/boom'))
+
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'db down', success: false })
+  })
+
+  it('honours a numeric status thrown with the error', async () => {
+    const res = await build().handle(new Request('http://localhost/bad'))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('Invalid release_date')
+  })
+
+  it('maps validation failures to 422 and unknown routes to 404', async () => {
+    const app = build()
+
+    expect((await app.handle(new Request('http://localhost/num?n=abc'))).status).toBe(422)
+    expect((await app.handle(new Request('http://localhost/missing'))).status).toBe(404)
+  })
+})
+
+describe('errorStatus', () => {
+  it('prefers an explicit numeric status and falls back to 500', () => {
+    expect(errorStatus('UNKNOWN', { status: 502 })).toBe(502)
+    expect(errorStatus('UNKNOWN', { code: 'ECONNRESET' })).toBe(500)
+    expect(errorStatus('PARSE', new Error('x'))).toBe(400)
   })
 })
 

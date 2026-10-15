@@ -1,3 +1,4 @@
+import { logger } from '../../../config'
 import { getReminder, setReminder } from '../../../reminders'
 import { openSign } from './sign'
 
@@ -86,7 +87,9 @@ export const getSolarToken = async (db) => {
   if (token.refreshExpire > now) {
     try {
       return await refresh(db, token)
-    } catch {
+    } catch (error) {
+      // Falling back to a fresh login hides why the refresh failed, so leave a trace of it.
+      logger.warn({ error: error.message }, 'solar token refresh failed, logging in again')
       return login(db)
     }
   }
