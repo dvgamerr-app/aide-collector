@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 
+import { alreadyRunning, startExclusive } from '../../../background-job'
 import {
   fetchAlarms,
   fetchConfigs,
@@ -251,6 +252,10 @@ export const solarBulk = async ({ db, logger, query }) => {
     return Response.json({ error: 'date query param must be a valid past/current date (YYYY-MM-DD)', success: false }, { status: 400 })
   }
 
-  void runBulk(db, logger, targetDate)
-  return new Response(null, { status: 202 })
+  const started = startExclusive(
+    'solar bulk',
+    () => runBulk(db, logger, targetDate),
+    (error) => logger.error({ error: error.message }, 'bulk solar crashed'),
+  )
+  return started ? new Response(null, { status: 202 }) : alreadyRunning('solar bulk')
 }
