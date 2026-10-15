@@ -16,7 +16,7 @@ const SEVERITY = {
 }
 
 const instance = Bun.env.TRACEWAY_URL?.replace(/\/+$/, '')
-const token = Bun.env.TRACEWAY_BACKEND_TOKEN
+const token = Bun.env.TRACEWAY_TOKEN
 
 // Logs stay local-only until Traceway is configured, mirroring the tracing plugin.
 const provider =
