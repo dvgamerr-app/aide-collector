@@ -12,6 +12,7 @@
 - ONT uses a reused Playwright/Chrome session only when `PATCH /stash/ont` is called; cron owns scheduling. Run one ONT collector replica. Schema, curl and configuration: `docs/ont-collector.md`.
 - Shared JSON reminder persistence: `src/reminders.js`; use `getReminder`/`setReminder` instead of repeating JSONB upsert queries.
 - Outbound LINE notifications: `src/notify.js` (`sendNotify`) pushes through the external notice-manager API (`https://notice.dvgamerr.app`); never call LINE's Messaging API directly from this service. First consumer: `POST /notify/cinema` (`src/routes/notify`). See `docs/notify.md`.
+- Traceway (OTLP/HTTP) is configured by `TRACEWAY_URL` (repository variable) and `TRACEWAY_TOKEN` (project ingest token, secret); both unset means tracing/log export is a no-op. Spans come from `src/tracing.js`, logs from `src/otel-logs.js`. Inbound `x-trace-parrent: 00-<traceId>-<spanId>-<flags>` (deliberate spelling, not `traceparent`) continues the caller's trace via `src/trace-context.js`; `startExclusive` background jobs run as `CONSUMER` Task spans through `runTask`. Logs and tasks started during a request are not linked to its trace, and outbound calls do not forward the header.
 - Request metadata is request-local and comes from `requestContext` in `src/middleware.js`; do not store trace IDs or start times in Elysia's shared application `store`.
 
 ## Development commands

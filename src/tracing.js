@@ -4,6 +4,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node'
 
 import { version } from './config'
+import { parrentPropagator } from './trace-context'
 
 const SERVICE_NAME = Bun.env.OTEL_SERVICE_NAME || 'aide-collector'
 const IGNORED_PATHS = ['/health', '/docs']
@@ -23,5 +24,6 @@ export const tracing = () => {
         new OTLPTraceExporter({ headers: { Authorization: `Bearer ${token}` }, url: `${instance}/api/otel/v1/traces` }),
       ),
     ],
+    textMapPropagator: parrentPropagator,
   })
 }
