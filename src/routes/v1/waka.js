@@ -89,7 +89,10 @@ export const telemetry = (query) => {
         from g where ai_session is not null group by 1, 2`,
       db`
         with g as (${g})
-        select count(distinct substring(agent_string from ' ([A-Za-z0-9._-]+)-wakatime/'))::int as editors from g`,
+        select count(distinct coalesce(
+          substring(agent_string from ' ([A-Za-z0-9._-]+)-wakatime/'),
+          substring(agent_string from ' ([A-Za-z0-9._-]+)/[^ ]+$')
+        ))::int as editors from g`,
       db`
         select model_key, input_cost_per_mtok::float8 as input, output_cost_per_mtok::float8 as output from ai_model_pricing`,
     ])

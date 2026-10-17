@@ -2,7 +2,33 @@ import { parseJson } from '../../json'
 import { WORK_OWNERS } from '../stash/github'
 import { ApiError } from './http'
 
-const POPULAR = 24
+// The site shows skill badges only for these well-known languages (same list the old collector filtered with).
+const POPULAR_LANGUAGES = new Set([
+  'Astro',
+  'C',
+  'C#',
+  'C++',
+  'CSS',
+  'Dart',
+  'Dockerfile',
+  'Go',
+  'HTML',
+  'Java',
+  'JavaScript',
+  'Kotlin',
+  'Objective-C',
+  'PHP',
+  'PowerShell',
+  'Python',
+  'Ruby',
+  'Rust',
+  'SCSS',
+  'Shell',
+  'Svelte',
+  'Swift',
+  'TypeScript',
+  'Vue',
+])
 const SORTS = {
   name: (db) => db.orderBy('full_name', 'asc'),
   pushed: (db) => db.orderBy('pushed_at', 'desc').orderBy('full_name', 'asc'),
@@ -79,7 +105,7 @@ export const githubSummary = async (db) => {
     languages: names,
     // A repository whose net LOC is negative (more lines deleted than added) is left out of the total.
     loc: rows.reduce((sum, row) => sum + Math.max(row.loc ?? 0, 0), 0),
-    popular: [...names].sort((a, b) => bytes[b] - bytes[a]).slice(0, POPULAR),
+    popular: names.filter((name) => POPULAR_LANGUAGES.has(name)),
     private: priv,
     public: rows.length - priv,
     total: rows.length,
