@@ -106,6 +106,29 @@ describe('githubSummary', () => {
     expect(summary.languages).toEqual(['EJS', 'Go', 'JavaScript', 'Perl', 'Rust'])
     // only the fixed list of well-known languages, alphabetical (EJS and Perl are not on it)
     expect(summary.popular).toEqual(['Go', 'JavaScript', 'Rust'])
+    // each repository counts once, for its main language; negative net LOC adds nothing
+    expect(summary.top5).toEqual([
+      { caption: 'JavaScript', commits: 10, loc: 50 },
+      { caption: 'Rust', commits: 5, loc: 0 },
+      { caption: 'EJS', commits: 1, loc: 0 },
+    ])
+  })
+
+  test('top5 keeps five languages ordered by commits, then LOC', async () => {
+    const lang = (name, commits, loc) => ({ commits, is_private: false, languages: { [name]: 100 }, loc })
+    const db = fakeDb([
+      lang('A', 1, 10),
+      lang('B', 9, 5),
+      lang('C', 5, 100),
+      lang('C', 4, 100),
+      lang('D', 9, 50),
+      lang('E', 2, 0),
+      lang('F', 3, 0),
+      { commits: 99, is_private: false, languages: {}, loc: 1 },
+    ])
+    const { top5 } = await githubSummary(db)
+    expect(top5.map((entry) => entry.caption)).toEqual(['C', 'D', 'B', 'F', 'E'])
+    expect(top5[0]).toEqual({ caption: 'C', commits: 9, loc: 200 })
   })
 
   test('answers 503 until the collector has run', async () => {

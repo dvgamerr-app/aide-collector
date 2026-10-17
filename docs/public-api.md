@@ -92,7 +92,8 @@ Same keys as `coding.json` (`wakatime`, `total`, `public`, `private`, `languages
 - `daytime`: 24 values, seconds coded per hour of the day over the last 365 days. `weektime`: 7 values, Monday first. The site only uses them relative to the maximum.
 - `average_seconds` is the mean over every day of the 365-day window (idle days count as zero), `weekly_seconds` the mean of the last seven days and `best_seconds` the largest day, the same definitions the old `coding.json` used. `wakatime` is the all-time total as `H hrs M mins` (`totalSeconds` carries the raw value).
 - Because AI agents keep emitting heartbeats around the clock, recent days can approach 24 h, so these figures are much higher than the older, pre-agent `coding.json`.
-- `commits`, `loc`, `total/public/private`, `languages`, `bytes`, `popular` come from `stash.github_repo`; the time fields come from `wakatime`.
+- `commits`, `loc`, `total/public/private`, `languages`, `bytes`, `popular`, `top5` come from `stash.github_repo`; the time fields come from `wakatime`.
+- `top5` (`experience.coding.top5`): the five languages with the most commits, as `{ caption, commits, loc }`. A repository counts once, towards its main language (the one with the most bytes); `loc` leaves out repositories whose net LOC is negative. The old file's values were hand-kept, so the numbers differ from it.
 
 ### `GET /v1/exchange-rates`
 
