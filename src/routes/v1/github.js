@@ -89,14 +89,24 @@ export const repositories = async ({ db, query }) => {
   }
 }
 
-/** Repository counts, commits, LOC and bytes per language, summed over every stored repository. */
+/** Repository counts, commits, LOC, bytes per language and the top languages by commits, over every stored repository. */
 export const githubSummary = async (db) => {
   const rows = await db.selectFrom('stash.github_repo').select(['commits', 'is_private', 'languages', 'loc']).execute()
   if (!rows.length) throw new ApiError(503, 'No GitHub data yet', 'The GitHub collector has not run yet')
 
   const bytes = {}
-  for (const row of rows)
-    for (const [language, size] of Object.entries(parseJson(row.languages) ?? {})) bytes[language] = (bytes[language] ?? 0) + size
+  // Each repository counts once, towards its main language (the one with the most bytes).
+  const perLanguage = new Map()
+  for (const row of rows) {
+    const languages = Object.entries(parseJson(row.languages) ?? {})
+    for (const [language, size] of languages) bytes[language] = (bytes[language] ?? 0) + size
+    const main = languages.sort(([, a], [, b]) => b - a)[0]?.[0]
+    if (!main) continue
+    const entry = perLanguage.get(main) ?? { caption: main, commits: 0, loc: 0 }
+    entry.commits += row.commits ?? 0
+    entry.loc += Math.max(row.loc ?? 0, 0)
+    perLanguage.set(main, entry)
+  }
   const names = Object.keys(bytes).sort((a, b) => a.localeCompare(b))
   const priv = rows.filter((row) => row.is_private).length
   return {
@@ -108,6 +118,7 @@ export const githubSummary = async (db) => {
     popular: names.filter((name) => POPULAR_LANGUAGES.has(name)),
     private: priv,
     public: rows.length - priv,
+    top5: [...perLanguage.values()].sort((a, b) => b.commits - a.commits || b.loc - a.loc).slice(0, 5),
     total: rows.length,
   }
 }

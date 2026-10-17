@@ -31,7 +31,7 @@ export const buildTime = ({ days, hourlyRows, last, totalSeconds }) => {
   }
 }
 
-/** coding.json plus `bytes` (language -> bytes) and `popular`; WakaTime figures from the wakatime database, GitHub from stash. */
+/** coding.json plus `bytes` (language -> bytes), `popular` and `top5` (commits and LOC per main language); WakaTime figures from the wakatime database, GitHub from stash. */
 export const coding = async ({ db }) => {
   const [repos, time] = await Promise.all([githubSummary(db), codingTimeSource().then(buildTime)])
   return {
@@ -45,6 +45,7 @@ export const coding = async ({ db }) => {
     popular: repos.popular,
     private: repos.private,
     public: repos.public,
+    top5: repos.top5,
     total: repos.total,
     totalSeconds: time.totalSeconds,
     updated: time.updated,
