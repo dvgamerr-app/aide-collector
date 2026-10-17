@@ -5,7 +5,7 @@
 - Runtime: Bun 1.3+ with Elysia.
 - Database: PostgreSQL through Kysely/Postgres.js.
 - Entry point: `src/index.js`.
-- Schema changes: Kysely migration modules in `src/migrations`; startup does not run them automatically.
+- Schema changes: Kysely migration modules in `src/migrations`; startup applies pending ones (`migrate()` after `connect()` in `src/index.js`) and refuses to start if one fails; `bun run migration:run` still runs them on their own.
 - External collectors: `src/routes/stash` (gold, lottery, MEA, MWA, solar, cinema and ONT).
 - Cinema scraping lives in `src/routes/stash/cinema`; it uses `fetch` + `HTMLRewriter`, never a headless browser. See `docs/cinema-collector.md`.
 - JSON/JSONB normalization: `parseJson` in `src/json.js` (Postgres.js may return JSONB strings).
@@ -13,6 +13,7 @@
 - Shared JSON reminder persistence: `src/reminders.js`; use `getReminder`/`setReminder` instead of repeating JSONB upsert queries.
 - Outbound LINE notifications: `src/notify.js` (`sendNotify`) pushes through the external notice-manager API (`https://notice.dvgamerr.app`); never call LINE's Messaging API directly from this service. First consumer: `POST /notify/cinema` (`src/routes/notify`). See `docs/notify.md`.
 - Traceway (OTLP/HTTP) is configured by `TRACEWAY_URL` (repository variable) and `TRACEWAY_TOKEN` (project ingest token, secret); both unset means tracing/log export is a no-op. Spans come from `src/tracing.js`, logs from `src/otel-logs.js`. Inbound `x-trace-parrent: 00-<traceId>-<spanId>-<flags>` (deliberate spelling, not `traceparent`) continues the caller's trace via `src/trace-context.js`; `startExclusive` background jobs run as `CONSUMER` Task spans through `runTask`. Logs and tasks started during a request are not linked to its trace, and outbound calls do not forward the header.
+- Public API: `src/routes/v1` is the only part meant for the internet (GET only, `application/problem+json` errors); WakaTime data is read live from the separate `wakatime` database through `src/waka-db.js` (`DATABASE_WAKATIME_URL`), GitHub and exchange rates come from `stash.github_repo` / `stash.exchange_rate` written by `PATCH /stash/github` and `PATCH /stash/currency`. Shapes, definitions and rollout: `docs/public-api.md`.
 - Request metadata is request-local and comes from `requestContext` in `src/middleware.js`; do not store trace IDs or start times in Elysia's shared application `store`.
 
 ## Development commands
@@ -74,4 +75,4 @@ bun run build
 git diff --check
 ```
 
-Current expected test inventory after this update: 53 tests across middleware, lottery/MEA/MWA/Solar mapping, token authorization, Solar device-status transitions, cinema normalisation/parsing, and cinema branch/showtime/seat parsing.
+Current expected test inventory after this update: 112 tests across middleware, lottery/MEA/MWA/Solar mapping, Solar device-status transitions, cinema normalisation/parsing, cinema branch/showtime/seat parsing, and the public v1 API (date ranges, telemetry aggregation, exchange rates, GitHub parsing, coding time).

@@ -2,7 +2,7 @@ import { swagger } from '@elysiajs/swagger'
 import { Elysia } from 'elysia'
 
 import { logger, PORT, version } from './config'
-import { connect, db, destroy } from './db'
+import { connect, db, destroy, migrate } from './db'
 import setupGracefulShutdown from './graceful'
 import { errorHandler, requestContext, responseLogger, swaggerConfig } from './middleware'
 import { shutdownLogs } from './otel-logs'
@@ -13,12 +13,14 @@ import notify from './routes/notify'
 import reminder from './routes/reminder'
 import stash from './routes/stash'
 import { closeOnt } from './routes/stash/ont'
-import token from './routes/token'
+import v1 from './routes/v1'
 import { tracing } from './tracing'
+import { closeWaka } from './waka-db'
 
 logger.info(`aide-collector ${version} starting...`)
 
 await connect()
+await migrate()
 
 const app = new Elysia()
   .use(tracing() ?? new Elysia())
@@ -33,10 +35,11 @@ const app = new Elysia()
   .use(reminder)
   .use(lottery)
   .use(notify)
-  .use(token)
+  .use(v1)
 
 setupGracefulShutdown(async () => {
   await closeOnt()
+  await closeWaka()
   await destroy()
   await shutdownLogs()
 })

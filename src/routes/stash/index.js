@@ -1,6 +1,8 @@
 import { Elysia, t } from 'elysia'
 
 import { cinema, cinemaIngest } from './cinema'
+import { currency } from './currency'
+import { github } from './github'
 import { gold } from './gold'
 import { lottery, lotteryBulk } from './lottery'
 import { mea } from './mea'
@@ -20,6 +22,24 @@ route.patch('/ont', collectOnt, {
 
 route.patch('/gold', gold, {
   detail: { description: 'Fetch current gold spot price and store it.', summary: 'Stash gold price', tags: ['Stash'] },
+})
+route.patch('/github', github, {
+  detail: {
+    description:
+      'Collect repositories, languages and commit counts from GitHub GraphQL and the owner LOC from stats/contributors (at most 50 repositories per run unless full=true). Runs in the background; concurrent runs return 409.',
+    summary: 'Stash GitHub repositories',
+    tags: ['Stash'],
+  },
+  query: t.Object({ full: t.Optional(t.String({ description: 'Set to true to recompute LOC for every repository' })) }),
+})
+route.patch('/currency', currency, {
+  detail: {
+    description:
+      'Fetch USD-based exchange rates from Yahoo Finance for THB, every stored currency and the optional symbols, and upsert them.',
+    summary: 'Stash exchange rates',
+    tags: ['Stash'],
+  },
+  query: t.Object({ symbols: t.Optional(t.String({ description: 'Extra currencies to start collecting', examples: ['JPY,EUR'] })) }),
 })
 route.patch('/cinema', cinema, {
   detail: {
