@@ -100,8 +100,9 @@ export class OntSession {
       Bun.env.CHROME_PATH ||
       (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : '/usr/bin/chromium')
     this.browser = await chromium.launch({
-      // /dev/shm is tiny in a container, which makes Chromium hang instead of failing.
-      args: ['--disable-dev-shm-usage'],
+      // /dev/shm is tiny in a container, which makes Chromium hang instead of failing; the crash reporter is a
+      // helper process nobody reads and the one that shows up as a zombie.
+      args: ['--disable-dev-shm-usage', '--disable-crash-reporter', '--disable-breakpad'],
       executablePath,
       handleSIGINT: false,
       handleSIGTERM: false,
