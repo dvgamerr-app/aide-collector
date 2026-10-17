@@ -98,13 +98,14 @@ describe('githubSummary', () => {
     const db = fakeDb([
       { commits: 10, is_private: false, languages: { Go: 100, JavaScript: 300 }, loc: 50 },
       { commits: 5, is_private: true, languages: '{"JavaScript":200,"Rust":900}', loc: null },
-      { commits: 1, is_private: false, languages: {}, loc: -351285 },
+      { commits: 1, is_private: false, languages: { EJS: 7, Perl: 3 }, loc: -351285 },
     ])
     const summary = await githubSummary(db)
     expect(summary).toMatchObject({ commits: 16, loc: 50, private: 1, public: 2, total: 3 })
-    expect(summary.bytes).toEqual({ Go: 100, JavaScript: 500, Rust: 900 })
-    expect(summary.languages).toEqual(['Go', 'JavaScript', 'Rust'])
-    expect(summary.popular).toEqual(['Rust', 'JavaScript', 'Go'])
+    expect(summary.bytes).toEqual({ EJS: 7, Go: 100, JavaScript: 500, Perl: 3, Rust: 900 })
+    expect(summary.languages).toEqual(['EJS', 'Go', 'JavaScript', 'Perl', 'Rust'])
+    // only the fixed list of well-known languages, alphabetical (EJS and Perl are not on it)
+    expect(summary.popular).toEqual(['Go', 'JavaScript', 'Rust'])
   })
 
   test('answers 503 until the collector has run', async () => {
