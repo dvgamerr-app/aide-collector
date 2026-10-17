@@ -51,18 +51,8 @@ export const responseLogger = ({ code, path, request, requestStartedAt, response
 
 export const swaggerConfig = {
   documentation: {
-    components: {
-      securitySchemes: {
-        apiKey: {
-          description: 'API key authentication using X-API-Key header',
-          in: 'header',
-          name: 'X-API-Key',
-          type: 'apiKey',
-        },
-      },
-    },
     info: {
-      description: 'Data collector API (cinema, gold, lottery, reminder, tokens)',
+      description: 'Data collector API (cinema, gold, lottery, reminder) and the public /v1 API',
       title: 'aide-collector API',
       version: version,
     },

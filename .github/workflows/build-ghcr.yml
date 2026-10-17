@@ -114,6 +114,12 @@ jobs:
           NOTIFY_CINEMA_CHAT: ${{ secrets.NOTIFY_CINEMA_CHAT }}
           TRACEWAY_URL: ${{ vars.TRACEWAY_URL || 'http://traceway.local' }}
           TRACEWAY_TOKEN: ${{ secrets.TRACEWAY_TOKEN }}
+          DATABASE_WAKATIME_URL: ${{ secrets.DATABASE_WAKATIME_URL }}
+          GH_USER_TOKEN: ${{ secrets.GH_USER_TOKEN }}
+          GH_APP_TOKEN: ${{ secrets.GH_APP_TOKEN }}
+          GH_OURKK_TOKEN: ${{ secrets.GH_OURKK_TOKEN }}
+          GH_WORK_TOKEN: ${{ secrets.GH_WORK_TOKEN }}
+          GH_AUTHOR_EMAIL: ${{ vars.GH_AUTHOR_EMAIL }}
         run: |
           container rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
           container run -d \
@@ -132,6 +138,9 @@ jobs:
             -e AG_BASE -e AG_USER -e AG_CLIENT_INTERVAL \
             -e NOTIFY_API_KEY -e NOTIFY_CINEMA_CHAT \
             -e TRACEWAY_TOKEN -e TRACEWAY_URL \
+            -e DATABASE_WAKATIME_URL \
+            -e GH_USER_TOKEN -e GH_APP_TOKEN -e GH_OURKK_TOKEN -e GH_WORK_TOKEN \
+            -e GH_AUTHOR_EMAIL \
             -p 3001:3000 \
             ${{ needs.api.outputs.docker_image }}:${{ needs.api.outputs.version }}
 

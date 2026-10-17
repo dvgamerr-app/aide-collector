@@ -13,4 +13,6 @@ LOG=$HOME/Library/Logs/aide-collector.log
 0 9 * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/mwa" 2>&1); rc=$?; echo "$(date -Iseconds) [mwa] $out" >> $LOG; exit $rc
 */5 * * * * out=$(curl -fsS --max-time 180 -X PATCH "$API/stash/solar?interval=1h" 2>&1); rc=$?; echo "$(date -Iseconds) [solar] $out" >> $LOG; exit $rc
 * * * * * out=$(curl -fsS --max-time 120 -X PATCH "$API/stash/ont" 2>&1); rc=$?; echo "$(date -Iseconds) [ont] $out" >> "$LOG"; exit $rc
+10 * * * * out=$(curl -fsS --max-time 60 -X PATCH "$API/stash/currency" 2>&1); rc=$?; echo "$(date -Iseconds) [currency] $out" >> "$LOG"; exit $rc
+0 3 1 * * out=$(curl -fsS --max-time 30 -X PATCH "$API/stash/github?full=true" 2>&1); rc=$?; echo "$(date -Iseconds) [github] $out" >> "$LOG"; exit $rc
 * * * * * PATH=/opt/homebrew/bin:$PATH; container ls -a 2>/dev/null | grep -q "aide-collector.*stopped" && { container start aide-collector >/dev/null 2>&1; echo "$(date -Iseconds) [watchdog] restarted aide-collector" >> "$LOG"; }
