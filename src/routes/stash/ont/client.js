@@ -90,7 +90,8 @@ export class OntSession {
     const browser = this.browser
     this.page = null
     this.browser = null
-    if (browser) await browser.close()
+    // A browser that will not close must not stall the next attempt or replace the error that got us here.
+    if (browser) await bounded(browser.close(), timeout()).catch(() => {})
   }
 
   async open() {
@@ -98,7 +99,15 @@ export class OntSession {
     const executablePath =
       Bun.env.CHROME_PATH ||
       (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : '/usr/bin/chromium')
-    this.browser = await chromium.launch({ executablePath, handleSIGINT: false, handleSIGTERM: false, headless: true, timeout: timeout() })
+    this.browser = await chromium.launch({
+      // /dev/shm is tiny in a container, which makes Chromium hang instead of failing.
+      args: ['--disable-dev-shm-usage'],
+      executablePath,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      headless: true,
+      timeout: timeout(),
+    })
     this.page = await this.browser.newPage()
     this.page.setDefaultTimeout(timeout())
     await this.page.route('**/*', (route) => {
