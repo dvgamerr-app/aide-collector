@@ -21,6 +21,17 @@ export const problem = (status, title, detail, extra = {}) =>
     status,
   })
 
+/**
+ * Answer for a request that matched no /v1 route (unknown path, or a method other than GET). It is built by the
+ * application error handler instead of a catch-all route, so every real route keeps its own endpoint in traces.
+ */
+export const unmatchedProblem = (method) =>
+  method === 'GET' || method === 'HEAD'
+    ? problem(404, 'Not found', 'Unknown /v1 resource')
+    : problem(405, 'Method not allowed', 'The /v1 API is read-only')
+
+export const isV1Path = (path) => path === '/v1' || path.startsWith('/v1/')
+
 export const respond = (data) => Response.json(data, { headers: HEADERS })
 
 /** Runs a v1 handler and turns thrown ApiErrors into problem responses. */
