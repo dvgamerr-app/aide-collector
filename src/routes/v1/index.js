@@ -3,7 +3,7 @@ import { Elysia, t } from 'elysia'
 import { coding } from './coding'
 import { exchangeRates } from './exchange'
 import { repositories } from './github'
-import { handle, problem } from './http'
+import { handle } from './http'
 import { codingDays, telemetry } from './waka'
 
 const rangeQuery = t.Object({
@@ -74,12 +74,5 @@ route.get('/exchange-rates', handle(exchangeRates), {
     quote: t.Optional(t.String({ description: 'Currency the rates are expressed in, default THB', examples: ['THB'] })),
   }),
 })
-
-// Anything else under /v1: wrong method on a known path or an unknown path.
-route.all('/*', ({ request }) =>
-  request.method === 'GET'
-    ? problem(404, 'Not found', 'Unknown /v1 resource')
-    : problem(405, 'Method not allowed', 'The /v1 API is read-only'),
-)
 
 export default route

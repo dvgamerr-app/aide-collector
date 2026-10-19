@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 
 import { version } from './config'
 import { withoutOtelLog } from './otel-logs'
+import { isV1Path, unmatchedProblem } from './routes/v1/http'
 
 export const requestContext = ({ headers, set }) => {
   const traceId = headers['x-trace-id'] || headers['trace-id'] || randomUUID()
@@ -19,7 +20,14 @@ export const errorStatus = (code, error) => {
   return ERROR_STATUS[code] ?? 500
 }
 
-export const errorHandler = ({ code, error, path, set, traceId }, logger) => {
+export const errorHandler = ({ code, error, path, request, set, traceId }, logger) => {
+  // Unmatched /v1 requests get a problem+json answer here, folded into the UNMATCHED endpoint like any other 404.
+  if (code === 'NOT_FOUND' && isV1Path(path)) {
+    const response = unmatchedProblem(request.method)
+    trace.getActiveSpan()?.setAttributes({ 'http.response.status_code': response.status, 'http.route': '/*' })
+    return response
+  }
+
   const status = errorStatus(code, error)
   set.status = status
   // Traceway folds a 404 with a catch-all route into one UNMATCHED endpoint instead of one row per URL.

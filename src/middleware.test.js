@@ -71,6 +71,35 @@ describe('errorHandler', () => {
   })
 })
 
+describe('errorHandler for /v1', () => {
+  const app = new Elysia().onError((context) => errorHandler(context, { error: () => {} })).get('/v1/known', () => ({ ok: true }))
+
+  it('answers an unknown /v1 path with a 404 problem', async () => {
+    const res = await app.handle(new Request('http://localhost/v1/nope'))
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toBe('application/problem+json')
+    expect((await res.json()).title).toBe('Not found')
+  })
+
+  it('answers any method other than GET with a 405 problem that allows GET', async () => {
+    for (const method of ['POST', 'PUT', 'DELETE']) {
+      const res = await app.handle(new Request('http://localhost/v1/known', { method }))
+
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toBe('GET')
+      expect((await res.json()).title).toBe('Method not allowed')
+    }
+  })
+
+  it('leaves unknown routes outside /v1 as the plain 404', async () => {
+    const res = await app.handle(new Request('http://localhost/v10/x'))
+
+    expect(res.status).toBe(404)
+    expect(await res.text()).toBe('NOT_FOUND')
+  })
+})
+
 describe('errorStatus', () => {
   it('prefers an explicit numeric status and falls back to 500', () => {
     expect(errorStatus('UNKNOWN', { status: 502 })).toBe(502)
