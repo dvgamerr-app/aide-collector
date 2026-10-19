@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { chromium } from 'playwright-core'
 
 import { OntSession } from './client'
 
@@ -38,5 +39,23 @@ describe('OntSession.close', () => {
 
   test('is a no-op without a browser', async () => {
     await expect(new OntSession().close()).resolves.toBeUndefined()
+  })
+})
+
+describe('OntSession.open', () => {
+  test('launches Chromium without the crash reporter or Breakpad helper', async () => {
+    const originalPass = Bun.env.ONT_PASS
+    Bun.env.ONT_PASS = 'test'
+    // Stop right after launch; only the launch options matter here.
+    const launch = spyOn(chromium, 'launch').mockRejectedValue(new Error('launch stubbed'))
+    try {
+      await expect(new OntSession().open()).rejects.toThrow('launch stubbed')
+      expect(launch).toHaveBeenCalledTimes(1)
+      expect(launch.mock.calls[0][0].args).toEqual(expect.arrayContaining(['--disable-crash-reporter', '--disable-breakpad']))
+    } finally {
+      launch.mockRestore()
+      if (originalPass === undefined) delete Bun.env.ONT_PASS
+      else Bun.env.ONT_PASS = originalPass
+    }
   })
 })
