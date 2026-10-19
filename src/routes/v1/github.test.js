@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { authorEmails, authorLoc, parseRepoNode, resolveSources, WORK_OWNERS } from '../stash/github'
+import { authorEmails, resolveSources, WORK_OWNERS } from '../stash/github'
+import { authorLoc, parseRepoNode } from '../stash/github-api'
 import { buildTime, formatHours } from './coding'
 import { githubSummary, repositories } from './github'
 import { ApiError } from './http'

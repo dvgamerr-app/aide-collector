@@ -142,46 +142,43 @@ const collectHistoricalDay = async (db, token, stationId, date) => {
   }))
 }
 
+const HISTORY_PERIODS = [
+  {
+    category: fetchStationCategoryMonthly,
+    categoryType: 'category_monthly',
+    format: 'YYYY-MM',
+    generated: fetchStationGeneratedMonthly,
+    generatedType: 'generated_monthly',
+    unit: 'month',
+  },
+  {
+    category: fetchStationCategoryYearly,
+    categoryType: 'category_yearly',
+    format: 'YYYY',
+    generated: fetchStationGeneratedYearly,
+    generatedType: 'generated_yearly',
+    unit: 'year',
+  },
+]
+
 const collectHistoricalPeriods = async (db, logger, stationId, targetDate) => {
   const currentDate = bkkDate()
   const total = { stationRows: 0 }
-  let month = dayjs(targetDate).startOf('month')
-  const lastMonth = dayjs(currentDate).startOf('month')
 
-  while (!month.isAfter(lastMonth, 'month')) {
-    const token = await getSolarToken(db)
-    const value = month.format('YYYY-MM')
-    const [category, generated] = await Promise.all([
-      fetchStationCategoryMonthly(token.accessToken, stationId, value),
-      fetchStationGeneratedMonthly(token.accessToken, stationId, value),
-    ])
-    const rows = [
-      ...mapCategorySummary(stationId, 'category_monthly', category),
-      ...mapGeneratedSummary(stationId, 'generated_monthly', generated),
-    ]
-    total.stationRows += await upsertSolarStationSummaries(db, rows)
-    logger.info(`bulk solar station month ${value}: ${rows.length} rows`)
-    month = month.add(1, 'month')
-    await pause(250)
-  }
-
-  let year = dayjs(targetDate).startOf('year')
-  const lastYear = dayjs(currentDate).startOf('year')
-  while (!year.isAfter(lastYear, 'year')) {
-    const token = await getSolarToken(db)
-    const value = year.format('YYYY')
-    const [category, generated] = await Promise.all([
-      fetchStationCategoryYearly(token.accessToken, stationId, value),
-      fetchStationGeneratedYearly(token.accessToken, stationId, value),
-    ])
-    const rows = [
-      ...mapCategorySummary(stationId, 'category_yearly', category),
-      ...mapGeneratedSummary(stationId, 'generated_yearly', generated),
-    ]
-    total.stationRows += await upsertSolarStationSummaries(db, rows)
-    logger.info(`bulk solar station year ${value}: ${rows.length} rows`)
-    year = year.add(1, 'year')
-    await pause(250)
+  for (const { category: fetchCategory, categoryType, format, generated: fetchGenerated, generatedType, unit } of HISTORY_PERIODS) {
+    const last = dayjs(currentDate).startOf(unit)
+    for (let period = dayjs(targetDate).startOf(unit); !period.isAfter(last, unit); period = period.add(1, unit)) {
+      const token = await getSolarToken(db)
+      const value = period.format(format)
+      const [category, generated] = await Promise.all([
+        fetchCategory(token.accessToken, stationId, value),
+        fetchGenerated(token.accessToken, stationId, value),
+      ])
+      const rows = [...mapCategorySummary(stationId, categoryType, category), ...mapGeneratedSummary(stationId, generatedType, generated)]
+      total.stationRows += await upsertSolarStationSummaries(db, rows)
+      logger.info(`bulk solar station ${unit} ${value}: ${rows.length} rows`)
+      await pause(250)
+    }
   }
 
   const token = await getSolarToken(db)

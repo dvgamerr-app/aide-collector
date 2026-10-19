@@ -41,31 +41,46 @@ export const withinWindow = ({ from, time, to }, entry) => {
   return true
 }
 
+const TIME_KEYS = ['from', 'time', 'to']
+
+/**
+ * Each rule returns an error message or nothing. They run in order and stop at the first failure,
+ * so a rule may rely on every rule above it having passed.
+ */
+const QUERY_RULES = [
+  ({ date }) => !/^\d{4}-\d{2}-\d{2}$/.test(date) && 'date must be YYYY-MM-DD',
+  ({ date }, raw, dates) => !dates.includes(date) && `date must be one of ${dates.join(' or ')}`,
+  (options, raw) => {
+    const key = TIME_KEYS.find((name) => raw?.[name] && !TIME_PATTERN.test(raw[name]))
+    return key && `${key} must be HH:MM`
+  },
+  // A time window keeps the answer to the handful of screenings somebody is actually choosing between.
+  ({ from, time, to }) => !time && !(from && to) && 'a time window is required: pass time=HH:MM, or both from=HH:MM and to=HH:MM',
+  ({ from, to }) => from && to && from > to && 'from must not be later than to',
+]
+
+const queryError = (options, raw, dates) => {
+  for (const rule of QUERY_RULES) {
+    const error = rule(options, raw, dates)
+    if (error) return error
+  }
+  return undefined
+}
+
 export const readQuery = (query) => {
   const dates = allowedDates()
-  const date = query?.date || dates[0]
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'date must be YYYY-MM-DD' }
-  if (!dates.includes(date)) return { error: `date must be one of ${dates.join(' or ')}` }
-
-  for (const key of ['from', 'time', 'to']) {
-    if (query?.[key] && !TIME_PATTERN.test(query[key])) return { error: `${key} must be HH:MM` }
-  }
-
-  // A time window keeps the answer to the handful of screenings somebody is actually choosing between.
-  const [from, time, to] = [query?.from || '', query?.time || '', query?.to || '']
-  if (!time && !(from && to)) return { error: 'a time window is required: pass time=HH:MM, or both from=HH:MM and to=HH:MM' }
-  if (from && to && from > to) return { error: 'from must not be later than to' }
-
-  return {
-    date,
+  const options = {
+    date: query?.date || dates[0],
     detail: query?.detail === 'true',
-    from,
+    from: query?.from || '',
     includePast: query?.past === 'true',
     movie: query?.movie || '',
     seats: query?.seats === 'true',
-    time,
-    to,
+    time: query?.time || '',
+    to: query?.to || '',
   }
+  const error = queryError(options, query, dates)
+  return error ? { error } : options
 }
 
 const collectShowtimes = async (theaterReference, query, logger) => {

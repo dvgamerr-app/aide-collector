@@ -1,6 +1,7 @@
 import { sql } from 'kysely'
 
 import { getReminder, setReminder } from '../../reminders'
+import { updateFromExcluded } from '../../upsert'
 
 const ORIGIN = 'https://eservicesapp.mwa.co.th'
 const LOGIN_URL = `${ORIGIN}/ESSecurity/v1/SecurityService/login`
@@ -184,6 +185,8 @@ const upsertAccount = (db, account) =>
     )
     .execute()
 
+const RECEIPT_KEYS = ['account_code', 'bill_number', 'receive_code', 'receive_sub_code']
+
 const upsertReceipts = async (db, accountCode, receipts) => {
   const values = mapMwaReceipts(accountCode, receipts)
   if (!values.length) return 0
@@ -191,15 +194,7 @@ const upsertReceipts = async (db, accountCode, receipts) => {
   await db
     .insertInto('stash.mwa_water')
     .values(values)
-    .onConflict((conflict) =>
-      conflict.columns(['account_code', 'bill_number', 'receive_code', 'receive_sub_code']).doUpdateSet((eb) =>
-        Object.fromEntries(
-          Object.keys(values[0])
-            .filter((key) => !['account_code', 'bill_number', 'receive_code', 'receive_sub_code'].includes(key))
-            .map((key) => [key, eb.ref(`excluded.${key}`)]),
-        ),
-      ),
-    )
+    .onConflict((conflict) => conflict.columns(RECEIPT_KEYS).doUpdateSet(updateFromExcluded(Object.keys(values[0]), RECEIPT_KEYS)))
     .execute()
 
   return values.length

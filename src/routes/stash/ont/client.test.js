@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { chromium } from 'playwright-core'
 
-import { OntSession } from './client'
+import { OntSession, validHosts } from './client'
 
 const originalTimeout = Bun.env.ONT_REQUEST_TIMEOUT
 
@@ -57,5 +57,29 @@ describe('OntSession.open', () => {
       if (originalPass === undefined) delete Bun.env.ONT_PASS
       else Bun.env.ONT_PASS = originalPass
     }
+  })
+})
+
+describe('validHosts', () => {
+  test('keeps well-formed hosts, drops the rest and dedupes by MAC address', () => {
+    const warnings = []
+    const logger = { warn: (details) => warnings.push(details) }
+    const hosts = validHosts(
+      [
+        { Active: '1', MACAddress: 'aa:bb:cc:dd:ee:01' },
+        { Active: 1, MACAddress: 'AA:BB:CC:DD:EE:01' },
+        { Active: '0', MACAddress: 'aa:bb:cc:dd:ee:02' },
+        { Active: '1', MACAddress: 'aabbccddee03' },
+        { Active: 'x', MACAddress: 'aa:bb:cc:dd:ee:04' },
+        null,
+      ],
+      logger,
+    )
+    expect(hosts.map((host) => host.MACAddress)).toEqual(['AA:BB:CC:DD:EE:01', 'aa:bb:cc:dd:ee:02'])
+    expect(warnings[0].rejected.map((row) => row.reason)).toEqual(['bad MACAddress', 'bad Active', 'not an object'])
+  })
+
+  test('fails when every host is rejected', () => {
+    expect(() => validHosts([{ Active: '1', MACAddress: 'nope' }])).toThrow('all 1 hosts rejected')
   })
 })

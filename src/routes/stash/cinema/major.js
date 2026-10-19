@@ -1,30 +1,12 @@
-import { collapse, parseMinutes, parseRelease, slugify } from './normalize'
+import { MAJOR_ORIGIN, parseMinutes, parseRelease, slugify, textSink } from './normalize'
 import { fetchWithRetry } from './request'
-import { MAJOR_ORIGIN, majorHeaders, majorSession } from './session'
+import { majorHeaders, majorSession } from './session'
 
 const MOVIE_URL = `${MAJOR_ORIGIN}/movie/`
 
 const SECTIONS = {
   'div#movie-page-coming': 'coming',
   'div#movie-page-showing': 'showing',
-}
-
-const textSink = (assign) => {
-  const state = { active: false, buffer: '' }
-  return {
-    element(element) {
-      state.active = true
-      state.buffer = ''
-      element.onEndTag(() => {
-        if (state.active) assign(collapse(state.buffer))
-        state.active = false
-        state.buffer = ''
-      })
-    },
-    text(chunk) {
-      if (state.active) state.buffer += chunk.text
-    },
-  }
 }
 
 /**
