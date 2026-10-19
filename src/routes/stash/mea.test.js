@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { getMeaPaymentPeriods, mapMeaPayments, normalizeMeaBillNo } from './mea'
+import { getMeaPaymentPeriods, mapMeaPayments, normalizeMeaBillNo } from './mea-map'
 
 describe('MEA payment periods', () => {
   it('builds every distinct valid year and month from electric bill history', () => {

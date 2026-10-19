@@ -1,5 +1,6 @@
-import { collapse, parseMinutes, parseRelease, slugify } from './normalize'
-import { fetchWithRetry, mapPool } from './request'
+import { mapPool } from '../../../concurrency'
+import { collapse, parseMinutes, parseRelease, slugify, textSink } from './normalize'
+import { fetchWithRetry } from './request'
 
 const DETAIL_CONCURRENCY = 6
 const ORIGIN = 'https://www.sfcinema.com'
@@ -24,24 +25,6 @@ export const isChallenge = (status, html) => {
     .slice(0, 4000)
     .toLowerCase()
   return CHALLENGE_MARKERS.some((marker) => text.includes(marker)) || status === 403 || status === 503
-}
-
-const textSink = (assign) => {
-  const state = { active: false, buffer: '' }
-  return {
-    element(element) {
-      state.active = true
-      state.buffer = ''
-      element.onEndTag(() => {
-        if (state.active) assign(collapse(state.buffer))
-        state.active = false
-        state.buffer = ''
-      })
-    },
-    text(chunk) {
-      if (state.active) state.buffer += chunk.text
-    },
-  }
 }
 
 export const parseSfListing = async (html) => {

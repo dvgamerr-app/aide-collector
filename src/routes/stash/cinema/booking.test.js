@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
-import { matchTheater, parseSeatPlan, parseShowtimes, parseTheaters } from './booking'
+import { matchTheater } from './booking'
+import { parseSeatPlan, parseShowtimes, parseTheaters } from './booking-parse'
 import { allowedDates, matchesMovie, readQuery, withinWindow } from './routes'
 
 const BRANCH_HTML = `

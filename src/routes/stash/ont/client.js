@@ -11,6 +11,9 @@ export const ontBase = () => new URL(Bun.env.ONT_BASE || 'http://10.203.1.1').or
 export const pollInterval = () => seconds('ONT_MIN_INTERVAL', 60, 60)
 const timeout = () => seconds('ONT_REQUEST_TIMEOUT', 15)
 
+/** Exponential backoff from the poll interval, capped at 15 minutes. */
+export const backoff = (failures) => Math.min(900000, pollInterval() * 2 ** Math.min(failures, 10))
+
 const bounded = async (promise, milliseconds) => {
   let timer
   try {
@@ -23,6 +26,31 @@ const bounded = async (promise, milliseconds) => {
   } finally {
     clearTimeout(timer)
   }
+}
+
+const MAC_ADDRESS = /^([\da-f]{2}:){5}[\da-f]{2}$/i
+
+const rejectHost = (host) => {
+  if (!host || typeof host !== 'object') return { reason: 'not an object' }
+  if (typeof host.MACAddress !== 'string' || !MAC_ADDRESS.test(host.MACAddress))
+    return { mac_length: String(host.MACAddress ?? '').length, reason: 'bad MACAddress' }
+  if (!['0', 0, '1', 1].includes(host.Active)) return { active: host.Active, reason: 'bad Active' }
+  return null
+}
+
+/** Drop malformed rows instead of discarding the whole snapshot; fail only when nothing usable remains. */
+export const validHosts = (data, logger) => {
+  const valid = []
+  const rejected = []
+  data.forEach((host, index) => {
+    const reason = rejectHost(host)
+    if (reason) rejected.push({ index, ...reason })
+    else valid.push(host)
+  })
+  if (rejected.length)
+    logger?.warn({ rejected: rejected.slice(0, 5), rejected_count: rejected.length, total: data.length }, 'ONT hosts skipped')
+  if (!valid.length && data.length) throw new Error(`Invalid ONT host response: all ${data.length} hosts rejected`)
+  return [...new Map(valid.map((host) => [host.MACAddress.toUpperCase(), host])).values()]
 }
 
 export class AdGuard {
@@ -43,41 +71,42 @@ export class AdGuard {
   }
 
   async read(logger) {
-    const q = new Map()
-    if (!Bun.env.AG_PASS) return { names: this.names, q, status: 'disabled' }
-    let status = 'backoff'
-    if (Date.now() >= this.statsDue) {
-      try {
-        const stats = await this.get('/control/stats')
-        if (!Array.isArray(stats.top_clients)) throw new Error('Invalid AdGuard stats')
-        for (const client of stats.top_clients) for (const [ip, count] of Object.entries(client)) q.set(ip, count)
-        this.failures = 0
-        // The collection endpoint already enforces the minimum interval.
-        this.statsDue = 0
-        status = 'ok'
-      } catch (error) {
-        q.clear()
-        status = 'unavailable'
-        this.statsDue = Date.now() + Math.min(900000, pollInterval() * 2 ** Math.min(++this.failures, 10))
-        logger.warn({ error: error.message }, 'ONT AdGuard stats unavailable')
-      }
-    }
-    if (Date.now() >= this.namesDue) {
-      try {
-        const clients = await this.get('/control/clients')
-        if (!Array.isArray(clients.auto_clients) && !Array.isArray(clients.clients)) throw new Error('Invalid AdGuard clients')
-        const names = new Map()
-        for (const client of clients.auto_clients || []) if (client.ip && client.name) names.set(client.ip, client.name)
-        for (const client of clients.clients || []) for (const id of client.ids || []) if (client.name) names.set(id, client.name)
-        this.names = names
-        this.nameFailures = 0
-        this.namesDue = Date.now() + seconds('AG_CLIENT_INTERVAL', 900, 60)
-      } catch (error) {
-        this.namesDue = Date.now() + Math.min(900000, pollInterval() * 2 ** Math.min(++this.nameFailures, 10))
-        logger.warn({ error: error.message }, 'ONT AdGuard names unavailable')
-      }
-    }
+    if (!Bun.env.AG_PASS) return { names: this.names, q: new Map(), status: 'disabled' }
+    const { q, status } = Date.now() >= this.statsDue ? await this.readStats(logger) : { q: new Map(), status: 'backoff' }
+    if (Date.now() >= this.namesDue) await this.readNames(logger)
     return { names: this.names, q, status }
+  }
+
+  async readNames(logger) {
+    try {
+      const clients = await this.get('/control/clients')
+      if (!Array.isArray(clients.auto_clients) && !Array.isArray(clients.clients)) throw new Error('Invalid AdGuard clients')
+      const names = new Map()
+      for (const client of clients.auto_clients || []) if (client.ip && client.name) names.set(client.ip, client.name)
+      for (const client of clients.clients || []) for (const id of client.ids || []) if (client.name) names.set(id, client.name)
+      this.names = names
+      this.nameFailures = 0
+      this.namesDue = Date.now() + seconds('AG_CLIENT_INTERVAL', 900, 60)
+    } catch (error) {
+      this.namesDue = Date.now() + backoff(++this.nameFailures)
+      logger.warn({ error: error.message }, 'ONT AdGuard names unavailable')
+    }
+  }
+
+  async readStats(logger) {
+    try {
+      const stats = await this.get('/control/stats')
+      if (!Array.isArray(stats.top_clients)) throw new Error('Invalid AdGuard stats')
+      const q = new Map(stats.top_clients.flatMap((client) => Object.entries(client)))
+      this.failures = 0
+      // The collection endpoint already enforces the minimum interval.
+      this.statsDue = 0
+      return { q, status: 'ok' }
+    } catch (error) {
+      this.statsDue = Date.now() + backoff(++this.failures)
+      logger.warn({ error: error.message }, 'ONT AdGuard stats unavailable')
+      return { q: new Map(), status: 'unavailable' }
+    }
   }
 }
 
@@ -176,20 +205,7 @@ export class OntSession {
       )
       if (!Array.isArray(result?.data))
         throw new Error(`Invalid ONT host response: data is ${result?.data === null ? 'null' : typeof result?.data}`)
-      const valid = []
-      const rejected = []
-      result.data.forEach((host, index) => {
-        if (!host || typeof host !== 'object') return rejected.push({ index, reason: 'not an object' })
-        if (typeof host.MACAddress !== 'string' || !/^([\da-f]{2}:){5}[\da-f]{2}$/i.test(host.MACAddress))
-          return rejected.push({ index, mac_length: String(host.MACAddress ?? '').length, reason: 'bad MACAddress' })
-        if (!['0', 0, '1', 1].includes(host.Active)) return rejected.push({ active: host.Active, index, reason: 'bad Active' })
-        valid.push(host)
-      })
-      // Drop malformed rows instead of discarding the whole snapshot; fail only when nothing usable remains.
-      if (rejected.length)
-        logger?.warn({ rejected: rejected.slice(0, 5), rejected_count: rejected.length, total: result.data.length }, 'ONT hosts skipped')
-      if (!valid.length && result.data.length) throw new Error(`Invalid ONT host response: all ${result.data.length} hosts rejected`)
-      return [...new Map(valid.map((host) => [host.MACAddress.toUpperCase(), host])).values()]
+      return validHosts(result.data, logger)
     } catch (error) {
       await this.close()
       throw error

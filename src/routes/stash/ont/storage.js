@@ -1,3 +1,5 @@
+import { updateFromExcluded } from '../../../upsert'
+
 const integer = (value) => {
   if (value == null || value === '' || !['number', 'string'].includes(typeof value)) return null
   const parsed = Number(value)
@@ -9,9 +11,7 @@ const upsert = async (db, table, rows, keys, fields) => {
   await db
     .insertInto(table)
     .values(rows)
-    .onConflict((conflict) =>
-      conflict.columns(keys).doUpdateSet((eb) => Object.fromEntries(fields.map((field) => [field, eb.ref(`excluded.${field}`)]))),
-    )
+    .onConflict((conflict) => conflict.columns(keys).doUpdateSet(updateFromExcluded(fields)))
     .execute()
 }
 

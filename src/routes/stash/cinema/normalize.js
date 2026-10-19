@@ -10,6 +10,7 @@ dayjs.extend(timezone)
 dayjs.extend(weekOfYear)
 
 export const TIMEZONE = 'Asia/Bangkok'
+export const MAJOR_ORIGIN = 'https://www.majorcineplex.com'
 
 const BIND_LIMIT = 200
 const GENRE_LIMIT = 120
@@ -22,6 +23,25 @@ export const collapse = (value) =>
   String(value ?? '')
     .replace(/\s+/g, ' ')
     .trim()
+
+/** HTMLRewriter handler that hands the collapsed text of each matched element to `assign`. */
+export const textSink = (assign) => {
+  const state = { active: false, buffer: '' }
+  return {
+    element(element) {
+      state.active = true
+      state.buffer = ''
+      element.onEndTag(() => {
+        if (state.active) assign(collapse(state.buffer))
+        state.active = false
+        state.buffer = ''
+      })
+    },
+    text(chunk) {
+      if (state.active) state.buffer += chunk.text
+    },
+  }
+}
 
 /** Slug used to bind the same movie across theater chains. Thai letters are kept so Thai-only titles survive. */
 export const slugify = (value) =>
@@ -78,6 +98,15 @@ export const cinemaAliases = (entry) => {
   return [...new Set(aliases)].filter(Boolean)
 }
 
+// Fields a later chain only fills in when the first chain left them empty.
+const FILL_FIELDS = ['display', 'genre', 'minutes', 'nameEn', 'nameTh', 'release']
+
+const foldEntry = (target, entry) => {
+  target.theater = { ...target.theater, ...entry.theater }
+  for (const field of FILL_FIELDS) target[field] ||= entry[field]
+  if (entry.section === 'showing') target.section = 'showing'
+}
+
 /**
  * Fold entries coming from several theater chains into one record per movie.
  * Single pass over the input with an alias index, so re-scraping stays linear instead of quadratic.
@@ -99,14 +128,7 @@ export const mergeCinemaEntries = (entries) => {
       continue
     }
 
-    target.theater = { ...target.theater, ...entry.theater }
-    target.display ||= entry.display
-    target.genre ||= entry.genre
-    target.minutes ||= entry.minutes
-    target.nameEn ||= entry.nameEn
-    target.nameTh ||= entry.nameTh
-    target.release ||= entry.release
-    if (entry.section === 'showing') target.section = 'showing'
+    foldEntry(target, entry)
     for (const alias of aliases) if (!index.has(alias)) index.set(alias, target)
   }
 

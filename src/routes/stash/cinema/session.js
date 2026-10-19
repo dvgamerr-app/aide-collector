@@ -1,6 +1,5 @@
+import { MAJOR_ORIGIN } from './normalize'
 import { fetchWithRetry } from './request'
-
-export const MAJOR_ORIGIN = 'https://www.majorcineplex.com'
 
 const SESSION_COOKIE = 'connect.sid'
 const SESSION_URL = (lang) => `${MAJOR_ORIGIN}/home/set_session/${lang}`
