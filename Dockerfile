@@ -1,4 +1,4 @@
-FROM oven/bun:alpine
+FROM oven/bun:1.4.4-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/dvgamerr-app/aide-collector"
 
