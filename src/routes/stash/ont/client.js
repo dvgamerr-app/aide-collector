@@ -1,5 +1,7 @@
 import { chromium } from 'playwright-core'
 
+import { hostResponseDetails } from './diagnostics'
+
 const seconds = (name, fallback, minimum = 1) => {
   const value = Number(Bun.env[name] ?? fallback)
   if (!Number.isFinite(value) || value < minimum || value > 86400) throw new Error(`${name} must be ${minimum}..86400 seconds`)
@@ -112,13 +114,17 @@ export class AdGuard {
 
 export class OntSession {
   browser = null
+  openedAt = null
   page = null
   requests = 0
+  responseStatus = null
 
   async close() {
     const browser = this.browser
     this.page = null
     this.browser = null
+    this.openedAt = null
+    this.responseStatus = null
     // A browser that will not close must not stall the next attempt or replace the error that got us here.
     if (browser) await bounded(browser.close(), timeout()).catch(() => {})
   }
@@ -153,6 +159,9 @@ export class OntSession {
     this.page.on('request', (request) => {
       if (['fetch', 'xhr'].includes(request.resourceType())) this.requests++
     })
+    this.page.on('response', (response) => {
+      this.responseStatus = response.status()
+    })
     await this.page.goto(`${ontBase()}/login_ais.html?1`, { waitUntil: 'domcontentloaded' })
     await this.page.waitForFunction(() => typeof window.onLogin === 'function' && document.getElementById('loginpp'))
     await this.page.evaluate(
@@ -173,11 +182,13 @@ export class OntSession {
       this.page.evaluate(() => initPageConfigure()),
       timeout(),
     )
+    this.openedAt = performance.now()
   }
 
   async read(logger) {
     try {
       if (!this.page) await this.open()
+      this.responseStatus = null
       const result = await bounded(
         this.page.evaluate(() =>
           $post('get_xml_childnode_value', {
@@ -203,8 +214,19 @@ export class OntSession {
         ),
         timeout(),
       )
-      if (!Array.isArray(result?.data))
+      if (!Array.isArray(result?.data)) {
+        logger?.warn(
+          hostResponseDetails({
+            httpStatus: this.responseStatus,
+            now: performance.now(),
+            openedAt: this.openedAt,
+            pageUrl: this.page.url(),
+            result,
+          }),
+          'ONT invalid host response',
+        )
         throw new Error(`Invalid ONT host response: data is ${result?.data === null ? 'null' : typeof result?.data}`)
+      }
       return validHosts(result.data, logger)
     } catch (error) {
       await this.close()

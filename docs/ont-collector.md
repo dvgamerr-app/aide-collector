@@ -39,6 +39,10 @@ curl --fail-with-body -sS 'http://localhost:3000/collector/ont/AA:BB:CC:DD:EE:FF
 
 งานซ้อนตอบ 409, ONT ล้มเหลวตอบ 502 และปิด browser เพื่อเปิด session ใหม่ในรอบถัดไป ระหว่าง backoff ตอบ 429 พร้อม `Retry-After` (เริ่ม 120 วินาที สูงสุด 900 วินาทีที่ค่าเริ่มต้น) ไม่มี retry ภายใน request ค่า backoff และ cache ชื่ออยู่ใน memory จึงเริ่มใหม่เมื่อ restart API ส่วนช่วงห่างของ snapshot ตรวจจาก DB
 
+เมื่อคำตอบ ONT ไม่มี `data` แบบ array จะมี log `ONT invalid host response` เพิ่มก่อนปิด session: `http_status` ของ HTTP response ล่าสุดใน browser ระหว่างรอบนั้น, `response_type`, `data_type`, `response_keys` (สูงสุด 20 ชื่อ ชื่อละ 64 ตัวอักษร), `response_code` เฉพาะ `code` ที่เป็นเลขจำนวนเต็ม และ `session_age_ms` นับตั้งแต่ login/init สำเร็จ พร้อม `page_url` ที่ตัด user/password, query และ fragment ออก ไม่เก็บ response ดิบหรือค่าใน payload และกรองชื่อฟิลด์ credential ออก ค่า status/อายุ session เป็น null เมื่อยังไม่มีข้อมูลเพียงพอ ใช้เทียบอายุ session และการกลับไปหน้า login เพื่อยืนยันสาเหตุก่อนเพิ่ม reconnect ภายใน request
+
+HTTP status ของ `Response` ที่ route คืนจะถูกส่งให้ tracing ก่อนบันทึก span เพื่อให้ 429/502 แสดงตรงกับคำตอบจริงใน Traceway โดยไม่ได้เปลี่ยนรอบ cron, minimum interval หรือ backoff
+
 AdGuard ล้มเหลวไม่ทำให้ snapshot ONT ล้มเหลว: `adguard_status` เป็น `unavailable` หรือ `backoff` และ `dns_queries` เป็น NULL หากไม่กำหนด `AG_PASS` จะเป็น `disabled` ส่วนชื่อที่อ่านสำเร็จเก็บ cache 15 นาที
 
 GET ล่าสุดคืน `collection: null` และ `devices: []` เมื่อยังไม่มีข้อมูล หาก ONT รายงานรายการว่าง จะมี collection ใหม่พร้อม `devices: []` ไม่ย้อนกลับไปแสดงอุปกรณ์รอบเก่า GET history เรียงใหม่ไปเก่าและมี `has_more`; หากเป็น true ให้เพิ่ม limit หรือแบ่งช่วงเวลา

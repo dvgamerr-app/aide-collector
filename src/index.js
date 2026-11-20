@@ -4,7 +4,7 @@ import { Elysia } from 'elysia'
 import { logger, PORT, version } from './config'
 import { connect, db, destroy, migrate } from './db'
 import setupGracefulShutdown from './graceful'
-import { errorHandler, requestContext, responseLogger, swaggerConfig } from './middleware'
+import { errorHandler, requestContext, responseLogger, swaggerConfig, syncResponseStatus } from './middleware'
 import { shutdownLogs } from './otel-logs'
 import collector from './routes/collector'
 import health from './routes/health'
@@ -28,6 +28,7 @@ const app = new Elysia()
   .derive(requestContext)
   .decorate({ db, logger })
   .onError((context) => errorHandler(context, logger))
+  .onAfterHandle(syncResponseStatus)
   .onAfterResponse((context) => responseLogger(context, logger))
   .use(health)
   .use(collector)

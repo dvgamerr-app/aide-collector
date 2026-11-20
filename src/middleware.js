@@ -44,6 +44,11 @@ export const errorHandler = ({ code, error, path, request, set, traceId }, logge
 
 export const elapsedMilliseconds = (startedAt, now = performance.now()) => Math.max(0, Math.round(now - startedAt))
 
+// The telemetry plugin reads set.status, which Elysia can leave at 200 for a returned Response.
+export const syncResponseStatus = ({ response, set }) => {
+  if (response instanceof Response) set.status = response.status
+}
+
 export const responseLogger = ({ code, path, request, requestStartedAt, response, set, status, traceId }, logger) => {
   if (path === '/health') return
 
