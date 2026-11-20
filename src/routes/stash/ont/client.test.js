@@ -60,6 +60,75 @@ describe('OntSession.open', () => {
   })
 })
 
+describe('OntSession.read diagnostics', () => {
+  test('logs response metadata without credentials, payload values or URL query and closes the failed session', async () => {
+    const warnings = []
+    const session = new OntSession()
+    const now = spyOn(performance, 'now').mockReturnValue(500000)
+    session.openedAt = 1000
+    session.page = {
+      evaluate: async () => {
+        session.responseStatus = 200
+        return { code: 401, data: null, message: 'secret message', password: 'secret password', sessionToken: 'secret token' }
+      },
+      url: () => 'http://admin:secret@10.203.1.1/login_ais.html?token=secret#secret',
+    }
+    let closed = false
+    session.browser = {
+      close: async () => {
+        closed = true
+      },
+    }
+    try {
+      await expect(session.read({ warn: (details) => warnings.push(details) })).rejects.toThrow('data is null')
+      expect(warnings).toEqual([
+        {
+          data_type: 'null',
+          http_status: 200,
+          page_url: 'http://10.203.1.1/login_ais.html',
+          response_code: 401,
+          response_keys: ['code', 'data', 'message'],
+          response_type: 'object',
+          session_age_ms: 499000,
+        },
+      ])
+      expect(JSON.stringify(warnings)).not.toContain('secret')
+      expect(closed).toBe(true)
+      expect(session.page).toBeNull()
+      expect(session.openedAt).toBeNull()
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test.each([undefined, 'secret response', { code: 'secret code', data: 'secret hosts' }])(
+    'rejects malformed results without logging their raw values (%j)',
+    async (result) => {
+      const warnings = []
+      const session = new OntSession()
+      session.responseStatus = 401
+      session.page = { evaluate: async () => result, url: () => 'http://10.203.1.1/main.html' }
+      await expect(session.read({ warn: (details) => warnings.push(details) })).rejects.toThrow('Invalid ONT host response')
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0].http_status).toBeNull()
+      expect(warnings[0].session_age_ms).toBeNull()
+      expect(warnings[0].response_code).toBeUndefined()
+      expect(JSON.stringify(warnings)).not.toContain('secret')
+    },
+  )
+
+  test('keeps a valid empty snapshot and session without a diagnostic warning', async () => {
+    const session = new OntSession()
+    const warn = () => {
+      throw new Error('unexpected diagnostic')
+    }
+    const page = { evaluate: async () => ({ data: [] }) }
+    session.page = page
+    expect(await session.read({ warn })).toEqual([])
+    expect(session.page).toBe(page)
+  })
+})
+
 describe('validHosts', () => {
   test('keeps well-formed hosts, drops the rest and dedupes by MAC address', () => {
     const warnings = []

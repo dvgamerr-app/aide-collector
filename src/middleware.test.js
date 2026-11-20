@@ -1,7 +1,10 @@
+import { opentelemetry } from '@elysiajs/opentelemetry'
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
+import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node'
 import { describe, expect, it } from 'bun:test'
 import { Elysia, t } from 'elysia'
 
-import { elapsedMilliseconds, errorHandler, errorStatus, requestContext } from './middleware'
+import { elapsedMilliseconds, errorHandler, errorStatus, requestContext, syncResponseStatus } from './middleware'
 
 describe('requestContext', () => {
   it('keeps a caller trace ID in request-local context and the response header', () => {
@@ -112,5 +115,33 @@ describe('elapsedMilliseconds', () => {
   it('measures elapsed request time and never returns a negative duration', () => {
     expect(elapsedMilliseconds(100, 105.6)).toBe(6)
     expect(elapsedMilliseconds(105, 100)).toBe(0)
+  })
+})
+
+describe('response status telemetry', () => {
+  it('exports the actual status of returned Responses, including ONT errors and backoff', async () => {
+    const exporter = new InMemorySpanExporter()
+    const app = new Elysia()
+      .use(opentelemetry({ autoDetectResources: false, spanProcessors: [new SimpleSpanProcessor(exporter)] }))
+      .onAfterHandle(syncResponseStatus)
+      .get('/response/:code', ({ params }) => Response.json({ success: false }, { status: Number(params.code) }))
+      .get('/object', ({ set }) => {
+        set.status = 201
+        return { success: true }
+      })
+
+    for (const status of [200, 409, 429, 502]) {
+      const response = await app.handle(new Request(`http://localhost/response/${status}`))
+      expect(response.status).toBe(status)
+      expect(await response.json()).toEqual({ success: false })
+      await new Promise(setImmediate)
+      const span = exporter.getFinishedSpans().findLast((span) => span.kind === SpanKind.SERVER)
+      expect(span.attributes['http.response.status_code']).toBe(status)
+      expect(span.status.code).toBe(status >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK)
+    }
+
+    expect((await app.handle(new Request('http://localhost/object'))).status).toBe(201)
+    await new Promise(setImmediate)
+    expect(exporter.getFinishedSpans().findLast((span) => span.kind === SpanKind.SERVER).attributes['http.response.status_code']).toBe(201)
   })
 })
