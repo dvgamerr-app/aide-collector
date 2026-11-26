@@ -41,6 +41,7 @@ import {
 
 const DEVICE_ID = Bun.env.SOLAR_DEVICE_ID
 const LOOKBACK_HOURS = 3
+const CURRENT_DEADLINE_MS = 24_000
 
 const bkkDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date())
 const bkkTime = (milliseconds) => new Date(milliseconds + 7 * 3600e3).toISOString().replace(/\.\d{3}Z$/, '+07:00')
@@ -52,70 +53,85 @@ const mapPayloads = (deviceId, payloads, mapper) => payloads.flatMap((payload) =
 
 const dedupeRecords = (rows) => [...new Map(rows.map((row) => [`${row.device_id}\u0000${row.attr}\u0000${row.recorded_at}`, row])).values()]
 
-const currentStationRows = async (token, stationId, date) => {
-  const month = date.slice(0, 7)
-  const year = date.slice(0, 4)
-  const [daily, monthly, yearly, generatedMonthly, generatedYearly, generatedTotal] = await Promise.all([
-    fetchStationCategoryDaily(token, stationId, date),
-    fetchStationCategoryMonthly(token, stationId, month),
-    fetchStationCategoryYearly(token, stationId, year),
-    fetchStationGeneratedMonthly(token, stationId, month),
-    fetchStationGeneratedYearly(token, stationId, year),
-    fetchStationGeneratedTotal(token, stationId),
-  ])
-
-  return [
-    ...mapCategorySummary(stationId, 'category_daily', daily),
-    ...mapCategorySummary(stationId, 'category_monthly', monthly),
-    ...mapCategorySummary(stationId, 'category_yearly', yearly),
-    ...mapGeneratedSummary(stationId, 'generated_monthly', generatedMonthly),
-    ...mapGeneratedSummary(stationId, 'generated_yearly', generatedYearly),
-    ...mapGeneratedSummary(stationId, 'generated_total', generatedTotal),
-  ]
+const readSource = async (name, request, failedSources, logger) => {
+  try {
+    return await request
+  } catch (error) {
+    failedSources.push(name)
+    logger.warn({ error: error.message, source: name }, 'Solar source unavailable')
+    return undefined
+  }
 }
 
-const collectCurrent = async (db, token, fromTime, toTime) => {
+const currentStationRows = async (token, stationId, date, signal, read) => {
+  const month = date.slice(0, 7)
+  const year = date.slice(0, 4)
+  const categories = [
+    ['category_daily', fetchStationCategoryDaily(token, stationId, date, signal)],
+    ['category_monthly', fetchStationCategoryMonthly(token, stationId, month, signal)],
+    ['category_yearly', fetchStationCategoryYearly(token, stationId, year, signal)],
+  ]
+  const generation = [
+    ['generated_monthly', fetchStationGeneratedMonthly(token, stationId, month, signal)],
+    ['generated_yearly', fetchStationGeneratedYearly(token, stationId, year, signal)],
+    ['generated_total', fetchStationGeneratedTotal(token, stationId, signal)],
+  ]
+  const rows = await Promise.all([
+    ...categories.map(async ([name, request]) => mapCategorySummary(stationId, name, await read(name, request))),
+    ...generation.map(async ([name, request]) => mapGeneratedSummary(stationId, name, await read(name, request))),
+  ])
+  return rows.flat()
+}
+
+export const collectCurrent = async ({ db, deviceId, fromTime, logger, signal, token, toTime }) => {
   const observedAt = new Date().toISOString()
   const date = bkkDate()
-  const details = await fetchDeviceDetails(token, DEVICE_ID)
+  const details = await fetchDeviceDetails(token, deviceId, signal)
   const stationId = details?.stationId == null ? null : String(details.stationId)
   if (!stationId) throw new Error('device details did not include stationId')
 
+  const failedSources = []
+  const read = (name, request) => readSource(name, request, failedSources, logger)
+  const deviceSnapshots = await insertSolarDeviceSnapshot(db, mapDeviceSnapshot(details, observedAt))
   const [recordHistory, keyHistory] = await Promise.all([
-    fetchRecordHistory(token, DEVICE_ID, fromTime, toTime),
-    fetchKeyHistory(token, DEVICE_ID, fromTime, toTime),
+    read('recordHistory', fetchRecordHistory(token, deviceId, fromTime, toTime, signal)),
+    read('keyHistory', fetchKeyHistory(token, deviceId, fromTime, toTime, signal)),
   ])
+  const historyRows = dedupeRecords([
+    ...mapPayloads(deviceId, keyHistory?.payloads ?? [], mapKeyHistoryPayload),
+    ...mapPayloads(deviceId, recordHistory?.payloads ?? [], mapRecordPayload),
+  ])
+  if (historyRows.length) await db.transaction().execute((transaction) => upsertSolarRecords(transaction, historyRows))
+
   const [alarms, latestState, energyFlow, configs, stationRows] = await Promise.all([
-    fetchAlarms(token, DEVICE_ID),
-    fetchLatestState(token, DEVICE_ID),
-    fetchEnergyFlow(token, DEVICE_ID),
-    fetchConfigs(token, DEVICE_ID),
-    currentStationRows(token, stationId, date),
+    read('alarms', fetchAlarms(token, deviceId, signal)),
+    read('latestState', fetchLatestState(token, deviceId, signal)),
+    read('energyFlow', fetchEnergyFlow(token, deviceId, signal)),
+    read('configs', fetchConfigs(token, deviceId, signal)),
+    currentStationRows(token, stationId, date, signal, read),
   ])
 
-  const recordRows = mapPayloads(DEVICE_ID, recordHistory.payloads, mapRecordPayload)
-  const keyRows = mapPayloads(DEVICE_ID, keyHistory.payloads, mapKeyHistoryPayload)
-  const latestRows = mapStatePayload(DEVICE_ID, latestState, 'latest_state')
-  const flowStateRows = mapStatePayload(DEVICE_ID, energyFlow?.deviceAttributeState, 'energy_flow_state')
-  const telemetryRows = dedupeRecords([...keyRows, ...recordRows, ...latestRows, ...flowStateRows])
-  const alarmRows = mapAlarms(alarms, observedAt)
-  const configRows = mapConfigSnapshots(DEVICE_ID, configs, observedAt)
-  const deviceRow = mapDeviceSnapshot(details, observedAt)
-  const energyFlowRow = mapEnergyFlow(DEVICE_ID, energyFlow, observedAt)
-
-  const counts = await db.transaction().execute(async (transaction) => ({
-    alarms: await upsertSolarAlarms(transaction, alarmRows),
-    configSnapshots: await insertSolarConfigSnapshots(transaction, configRows),
-    deviceSnapshots: await insertSolarDeviceSnapshot(transaction, deviceRow),
-    energyFlowSnapshots: await upsertSolarEnergyFlow(transaction, energyFlowRow),
-    latestStateSnapshots: await upsertSolarLatestState(transaction, DEVICE_ID, latestState, observedAt),
-    stationSummaryRows: await upsertSolarStationSummaries(transaction, stationRows),
-    telemetryRows: await upsertSolarRecords(transaction, telemetryRows),
-  }))
+  const stateRows = dedupeRecords([
+    ...mapStatePayload(deviceId, latestState, 'latest_state'),
+    ...mapStatePayload(deviceId, energyFlow?.deviceAttributeState, 'energy_flow_state'),
+  ])
+  const counts = await db.transaction().execute(async (transaction) => {
+    await upsertSolarRecords(transaction, stateRows)
+    return {
+      alarms: await upsertSolarAlarms(transaction, mapAlarms(alarms ?? [], observedAt)),
+      configSnapshots: await insertSolarConfigSnapshots(transaction, mapConfigSnapshots(deviceId, configs, observedAt)),
+      deviceSnapshots,
+      energyFlowSnapshots: await upsertSolarEnergyFlow(transaction, mapEnergyFlow(deviceId, energyFlow, observedAt)),
+      latestStateSnapshots: await upsertSolarLatestState(transaction, deviceId, latestState, observedAt),
+      stationSummaryRows: await upsertSolarStationSummaries(transaction, stationRows),
+      telemetryRows: dedupeRecords([...historyRows, ...stateRows]).length,
+    }
+  })
 
   return {
     counts,
-    points: { keyHistory: keyHistory.points, recordHistory: recordHistory.points },
+    failedSources: failedSources.sort(),
+    points: { keyHistory: keyHistory?.points ?? 0, recordHistory: recordHistory?.points ?? 0 },
     stationId,
   }
 }
@@ -200,11 +216,18 @@ export const solar = async ({ db, logger, query }) => {
   const hours = parseInterval(query?.interval) ?? LOOKBACK_HOURS
   let result
   try {
-    const token = await getSolarToken(db)
+    const signal = AbortSignal.timeout(CURRENT_DEADLINE_MS)
+    const token = await getSolarToken(db, signal)
     const [fromTime, toTime] = trailing(hours)
-    const collected = await collectCurrent(db, token.accessToken, fromTime, toTime)
-    logger.info({ ...collected.counts, ...collected.points }, `solar: collected all sources (last ${hours}h)`)
-    result = { body: { counts: collected.counts, points: collected.points, success: true }, status: 200 }
+    const collected = await collectCurrent({ db, deviceId: DEVICE_ID, fromTime, logger, signal, token: token.accessToken, toTime })
+    logger.info(
+      { ...collected.counts, ...collected.points, failedSources: collected.failedSources },
+      `solar: collection finished (last ${hours}h)`,
+    )
+    result = {
+      body: { counts: collected.counts, failedSources: collected.failedSources, points: collected.points, success: true },
+      status: 200,
+    }
   } catch (error) {
     logger.error({ error: error.message }, 'Error collecting solar')
     result = { body: { error: error.message, success: false }, status: 500 }
@@ -220,7 +243,7 @@ const runBulk = async (db, logger, targetDate) => {
   try {
     const firstToken = await getSolarToken(db)
     const [fromTime, toTime] = trailing(LOOKBACK_HOURS)
-    const current = await collectCurrent(db, firstToken.accessToken, fromTime, toTime)
+    const current = await collectCurrent({ db, deviceId: DEVICE_ID, fromTime, logger, token: firstToken.accessToken, toTime })
 
     while (cursor >= targetDate) {
       const token = await getSolarToken(db)
