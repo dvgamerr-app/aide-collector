@@ -83,7 +83,7 @@ route.patch('/lottery/bulk', lotteryBulk, {
 route.patch('/solar', solar, {
   detail: {
     description:
-      'Collect Solar history/latest state, alarms, device details, energy flow, config snapshots and station summaries (3-hour history by default).',
+      'Collect Solar data (3-hour history by default). Saves device details and history before optional sources and returns any failed sources.',
     summary: 'Stash all Solar data sources',
     tags: ['Stash'],
   },

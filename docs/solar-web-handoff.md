@@ -156,6 +156,7 @@ PATCH /stash/solar?interval=1h
     "stationSummaryRows": 324,
     "telemetryRows": 25016
   },
+  "failedSources": [],
   "points": {
     "keyHistory": 131,
     "recordHistory": 130
@@ -163,7 +164,7 @@ PATCH /stash/solar?interval=1h
 }
 ```
 
-จำนวนจริงเปลี่ยนตามเวลาที่เรียกและข้อมูลจาก upstream
+จำนวนจริงเปลี่ยนตามเวลาที่เรียกและข้อมูลจาก upstream หากบางแหล่งช้าหรือหลุด ระบบยังบันทึกข้อมูลที่ดึงได้และคืนชื่อแหล่งที่พลาดใน `failedSources`
 
 ### Backfill
 

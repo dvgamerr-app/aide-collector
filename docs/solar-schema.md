@@ -20,7 +20,7 @@ Collector ใช้ device จาก `SOLAR_DEVICE_ID` และเก็บข�
 
 ## Collector behavior
 
-- `PATCH /stash/solar` ดึง record/key history ตาม trailing window และ refresh ข้อมูลปัจจุบันครบทุกกลุ่ม
+- `PATCH /stash/solar` บันทึก device snapshot และ record/key history ที่ดึงได้ก่อนอ่านข้อมูลเสริม หากอ่านแหล่งอื่นไม่สำเร็จ ผลตอบกลับระบุใน `failedSources` และเก็บผลจากแหล่งที่เหลือ
 - `PATCH /stash/solar/bulk?date=YYYY-MM-DD` ทำงานเบื้องหลังแบบ idempotent ตั้งแต่วันนี้ย้อนถึงวันที่กำหนด
 - Bulk ดึง record history, raw key history และ station daily ทีละวัน จากนั้นเติม station monthly/yearly/total
 - Alarm ดึงแบบ pagination ทั้งหมด ส่วน device details, latest state, energy flow และ config ไม่มี API ย้อนหลัง จึงเก็บได้ตั้งแต่เวลาที่ collector เริ่มทำงาน

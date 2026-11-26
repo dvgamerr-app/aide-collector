@@ -96,7 +96,7 @@ endpoint กลุ่ม `/stash` ไม่ต้องใช้ API key จึ�
 - `PATCH /stash/lottery/bulk?date=YYYY-MM-DD` — เริ่ม backfill ผลรางวัลและตอบ `202` ทันที
 - `PATCH /stash/mea` — ดึงมิเตอร์ ประวัติค่าไฟ และประวัติการชำระย้อนหลังแยกรายเดือน โดยจับคู่ `billNo` แบบคงเลขศูนย์นำหน้า
 - `PATCH /stash/mwa` — login, ดึงทุกบัญชีที่ลงทะเบียนพร้อมประวัติใบเสร็จ/ค่าน้ำ และบันทึกแบบ upsert
-- `PATCH /stash/solar?interval=1h` — เก็บ Solar ครบทั้ง record/key history, latest state, alarm, device snapshot, energy flow, config snapshot และ station summary; history ใช้ช่วงย้อนหลัง 3 ชั่วโมงโดยค่าเริ่มต้น
+- `PATCH /stash/solar?interval=1h` — เก็บ Solar ครบทั้ง record/key history, latest state, alarm, device snapshot, energy flow, config snapshot และ station summary โดยบันทึก snapshot กับ history ที่ดึงได้ก่อน พร้อมคืน `failedSources` สำหรับแหล่งที่เก็บไม่สำเร็จ; history ใช้ช่วงย้อนหลัง 3 ชั่วโมงโดยค่าเริ่มต้น
 - `PATCH /stash/solar/bulk?date=YYYY-MM-DD` — เริ่ม backfill record/key history และ station summary รายวัน/เดือน/ปี พร้อม refresh ชุดข้อมูลที่ API มีเฉพาะค่าปัจจุบัน แล้วตอบ `202` ทันที
 - `POST /reminder/gold` — บันทึกข้อมูลการลงทุนทองสำหรับการคำนวณ collector
 

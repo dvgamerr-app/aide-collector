@@ -1,5 +1,7 @@
 import { sql } from 'kysely'
 
+const LIVE_SOURCES = ['latest_state', 'energy_flow_state']
+
 const jsonb = (value) => sql`${value}::jsonb`
 
 export const upsertSolarRecords = async (db, rows) => {
@@ -8,15 +10,24 @@ export const upsertSolarRecords = async (db, rows) => {
       .insertInto('stash.solar_record')
       .values(rows.slice(index, index + 1000))
       .onConflict((conflict) =>
-        conflict.columns(['device_id', 'attr', 'recorded_at']).doUpdateSet((eb) => ({
-          name_display: eb.ref('excluded.name_display'),
-          source: eb.ref('excluded.source'),
-          unit: eb.ref('excluded.unit'),
-          updated_at: sql`now()`,
-          value: eb.ref('excluded.value'),
-          value_display: eb.ref('excluded.value_display'),
-          value_text: eb.ref('excluded.value_text'),
-        })),
+        conflict
+          .columns(['device_id', 'attr', 'recorded_at'])
+          .doUpdateSet((eb) => ({
+            name_display: eb.ref('excluded.name_display'),
+            source: eb.ref('excluded.source'),
+            unit: eb.ref('excluded.unit'),
+            updated_at: sql`now()`,
+            value: eb.ref('excluded.value'),
+            value_display: eb.ref('excluded.value_display'),
+            value_text: eb.ref('excluded.value_text'),
+          }))
+          .where((eb) =>
+            eb.or([
+              eb('solar_record.source', 'not in', LIVE_SOURCES),
+              eb('excluded.source', '=', 'energy_flow_state'),
+              eb.and([eb('solar_record.source', '=', 'latest_state'), eb('excluded.source', '=', 'latest_state')]),
+            ]),
+          ),
       )
       .execute()
   }
